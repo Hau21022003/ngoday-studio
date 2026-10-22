@@ -10,6 +10,8 @@
 
 ## 2. Phase 1 — Episode, Prompt Template & Script Editor
 
+**Implementation status (2026-10-23):** hoàn tất local và được checkpoint trên branch `feat/phase-1` để người dùng review. Acceptance matrix, test report và các quyết định implementation nằm trong `06-phase1-implementation.md`. Chưa push/merge.
+
 ### Mục tiêu
 
 Tạo nguồn dữ liệu local đáng tin cậy cho Episode, prompt, script, scene và asset slot; chưa điều khiển Flow.
@@ -67,7 +69,7 @@ Tạo nguồn dữ liệu local đáng tin cậy cho Episode, prompt, script, sc
 
 ### Exit gate
 
-Người dùng duyệt data model, naming convention, script import format và UI flow. Sau đó mới thực hiện Flow PoC.
+Người dùng đã duyệt data model, naming convention, script import format và UI flow ngày 2026-10-23. Flow PoC tối thiểu đã được thực hiện trước implementation và giữ trạng thái Conditional GO; Phase 1 không mở rộng PoC hoặc automation.
 
 ## 3. Phase 2 — Google Flow Automation bằng Playwright
 

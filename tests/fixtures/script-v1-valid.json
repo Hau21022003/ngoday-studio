@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "title": "Paper Boat",
+  "scenes": [
+    {
+      "title": "Opening",
+      "summary": "A quiet table.",
+      "narration": "We begin with a sheet of paper.",
+      "imagePrompt": "A white sheet on a table.",
+      "videoPrompt": ""
+    },
+    {
+      "title": "Fold",
+      "summary": "The first fold.",
+      "narration": "",
+      "imagePrompt": "",
+      "videoPrompt": "Hands fold the sheet."
+    }
+  ]
+}

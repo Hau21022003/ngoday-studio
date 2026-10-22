@@ -1,0 +1,48 @@
+node_modules/
+out/
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Local databases and application runtime
+*.log
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+.ngoday-dev/
+
+# Local environment, credentials and browser sessions
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials/
+*credentials*.json
+secrets/
+.auth/
+playwright/.auth/
+.runtime/
+session/
+sessions/
+Session Storage/
+Sessions/
+Cookies
+Cookies-journal
+
+# Test reports, recordings and temporary files
+artifacts/
+downloads/
+test-results/
+playwright-report/
+blob-report/
+*.har
+*.trace.zip
+*.tmp
+.tmp/
+tmp/
+temp/

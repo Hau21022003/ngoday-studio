@@ -1,0 +1,10 @@
+node_modules/
+out/
+dist/
+coverage/
+poc/
+docs/01-workflow.md
+docs/02-architecture.md
+docs/03-roadmap.md
+docs/04-flow-poc.md
+docs/05-decisions.md

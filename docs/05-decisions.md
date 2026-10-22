@@ -17,37 +17,37 @@
 
 ### D-002 — Local-first, không backend
 
-**Status:** Proposed.  
+**Status:** Accepted cho Phase 1 ngày 2026-10-23.
 **Decision:** SQLite lưu metadata/queue; filesystem lưu media; không server/cloud sync trong ba Phase.  
 **Reason:** phù hợp một người dùng, đơn giản, dễ backup và không phát sinh vận hành backend.
 
 ### D-003 — Electron process boundary
 
-**Status:** Proposed.  
+**Status:** Accepted cho Phase 1 ngày 2026-10-23.
 **Decision:** React renderer chỉ gọi typed IPC qua preload; database, filesystem và Playwright nằm ở main/application layer. `contextIsolation` bật và `nodeIntegration` tắt.  
 **Reason:** giảm quyền của UI và giữ side effect ở một nơi.
 
 ### D-004 — SQLite và binary media
 
-**Status:** Proposed.  
-**Decision:** SQLite không chứa blob media. File nằm trong workspace do người dùng chọn; DB lưu relative path, hash và metadata.  
+**Status:** Accepted cho Phase 1 ngày 2026-10-23.
+**Decision:** SQLite không chứa blob media. Phase 1 chỉ lưu path/hash/metadata của character reference; binary media và workspace media thuộc Phase sau.
 **Reason:** database nhỏ, backup/export media rõ ràng và dễ dùng với CapCut.
 
 ### D-005 — Cách tạo kịch bản ở Phase 1
 
-**Status:** Proposed.  
+**Status:** Accepted cho Phase 1 ngày 2026-10-23.
 **Decision:** bản tối thiểu render/copy prompt và cho paste/import kết quả từ ChatGPT; không tự động hóa ChatGPT web. Tích hợp LLM API là tùy chọn sau khi chốt provider/chi phí/secret storage.  
 **Reason:** hoàn thành editor local mà không thêm auth, API cost và dependency chưa cần thiết.
 
 ### D-006 — Version bất biến
 
-**Status:** Proposed.  
+**Status:** Accepted cho Phase 1 ngày 2026-10-23.
 **Decision:** template version, script revision và generation attempt đã sử dụng không bị update đè; thay đổi tạo snapshot/revision mới.  
 **Reason:** luôn truy được prompt nào sinh ra media nào.
 
 ### D-007 — Asset slot và tên canonical
 
-**Status:** Proposed.  
+**Status:** Accepted cho Phase 1 ngày 2026-10-23.
 **Decision:** `scene-{sceneOrder:02}-{assetOrder:02}` biểu diễn một output logic; retry/version nằm trong metadata, không nằm trong tên canonical.  
 **Consequence:** reorder scene có thể đổi hàng loạt canonical name nên phải preview và xác nhận.
 
@@ -59,7 +59,7 @@
 
 ### D-009 — Browser automation có giám sát
 
-**Status:** Proposed.  
+**Status:** Accepted làm ranh giới cho automation đầu tiên ngày 2026-10-23.
 **Decision:** Playwright chạy headful với browser profile riêng; login/2FA/CAPTCHA do người dùng làm. Không chạy unattended ở bản đầu.  
 **Reason:** Google có thể chặn browser bị automation điều khiển; Flow là UI bên thứ ba không có contract ổn định.
 
@@ -71,7 +71,7 @@
 
 ### D-011 — Concurrency mặc định bằng 1
 
-**Status:** Proposed.  
+**Status:** Accepted làm ranh giới cho automation đầu tiên ngày 2026-10-23.
 **Decision:** Phase 2 tạo một generation tại một thời điểm. Chỉ tăng concurrency khi có remote asset identity ổn định và test mapping đạt.  
 **Reason:** mapping chính xác quan trọng hơn throughput ở bản đầu.
 
@@ -115,13 +115,21 @@
 
 ### D-018 — Windows-first
 
-**Status:** Proposed.  
+**Status:** Accepted cho ba Phase đầu ngày 2026-10-23.
 **Decision:** ba Phase đầu hỗ trợ Windows vì path đích, Flow desktop và CapCut workflow hiện tại đều ở Windows. Kiến trúc tránh khóa path không cần thiết nhưng chưa cam kết macOS/Linux.  
 **Reason:** giảm ma trận test/packaging.
 
-## 3. Vấn đề cần người dùng xác nhận trước Phase 1
+### D-019 — SQLite driver tích hợp
+
+**Status:** Accepted cho Phase 1 implementation ngày 2026-10-23.
+**Decision:** dùng `node:sqlite` có sẵn trong Node/Electron thay cho `better-sqlite3`; giữ nguyên SQLite schema, WAL, foreign key và transaction semantics.
+**Reason:** `better-sqlite3` cần native rebuild và Visual Studio C++ toolchain trên môi trường Windows hiện tại. Driver tích hợp loại bỏ native dependency và làm setup/build đơn giản hơn; Electron 45 đã dùng Node 24.
+
+## 3. Quyết định Phase 1 đã xác nhận
 
 ### Q1 — Ý nghĩa hai số trong tên
+
+**Resolved 2026-10-23:** số thứ hai là thứ tự asset/shot logic trong scene. Retry/version là metadata riêng.
 
 Đề xuất hiện tại coi `scene-01-02` là asset thứ 02 thuộc scene 01. Cần xác nhận số thứ hai là:
 
@@ -132,6 +140,8 @@
 Đây là quyết định ảnh hưởng data model, reorder và export.
 
 ### Q2 — Loại asset cho mỗi scene
+
+**Resolved 2026-10-23:** mỗi scene có số asset slot tự do; từng slot chọn `image` hoặc `video`.
 
 Cần xác nhận một scene thường có:
 
@@ -144,6 +154,8 @@ Cần xác nhận một scene thường có:
 
 ### Q3 — Định dạng script nguồn
 
+**Resolved 2026-10-23:** hỗ trợ Markdown v1 có cấu trúc và JSON v1. Schema/fixture được công bố tại `docs/formats/script-v1.md` và `tests/fixtures/`.
+
 Cần một ví dụ kịch bản thực tế đã ẩn thông tin nhạy cảm để chốt field và parser. Đề xuất hỗ trợ:
 
 - Markdown thân thiện để paste/chỉnh sửa.
@@ -152,6 +164,8 @@ Cần một ví dụ kịch bản thực tế đã ẩn thông tin nhạy cảm 
 CSV không phải định dạng chính cho script lồng nhiều field.
 
 ### Q4 — Tạo kịch bản bằng cách nào
+
+**Resolved 2026-10-23:** Phase 1 chỉ render/copy prompt rồi paste/import; không dùng LLM API và không tự động hóa ChatGPT web.
 
 Chọn một mức:
 
@@ -163,9 +177,13 @@ Chọn một mức:
 
 ### Q5 — Scene approval
 
+**Resolved 2026-10-23:** một trạng thái approval cấp scene với validation chi tiết. Scene cần title, nội dung, ít nhất một asset slot, prompt hợp lệ và reference khả dụng.
+
 Cần xác nhận duyệt ở mức scene đủ hay phải duyệt riêng narration, image prompt và video prompt. Đề xuất một trạng thái scene cùng validation chi tiết; asset slot chỉ queue khi scene approved.
 
 ### Q6 — Reorder sau khi đã generate
+
+**Resolved cho Phase 1 ngày 2026-10-23:** reorder có asset slot luôn preview canonical rename và yêu cầu xác nhận. Khi Phase 2 có remote mapping, scene number bị khóa sau generation đầu tiên; migration/renumber cần quyết định riêng.
 
 Nếu đổi thứ tự scene sau khi asset đã rename/download, có hai lựa chọn:
 

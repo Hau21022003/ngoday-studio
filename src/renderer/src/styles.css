@@ -1,0 +1,103 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--app-background);
+  --color-foreground: var(--ink);
+  --color-card: var(--paper);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--paper);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--brand);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--navy);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--paper-deep);
+  --color-muted-foreground: var(--muted-ink);
+  --color-accent: var(--accent-soft);
+  --color-accent-foreground: var(--accent-dark);
+  --color-destructive: var(--destructive);
+  --color-border: var(--line);
+  --color-input: var(--input-border);
+  --color-ring: var(--brand);
+  --font-sans: Inter, 'Segoe UI', system-ui, sans-serif;
+  --font-serif: Georgia, 'Times New Roman', serif;
+  --font-mono: 'Cascadia Code', Consolas, monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  color: #24261f;
+  background: #f4f1ea;
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  font-synthesis: none;
+  --app-background: #f4f1ea;
+  --ink: #24261f;
+  --muted-ink: #6d7167;
+  --line: #d8d4c9;
+  --paper: #fffdf8;
+  --paper-deep: #eee9de;
+  --brand: #d85a36;
+  --accent-soft: #f4e2db;
+  --accent-dark: #8f321c;
+  --primary-foreground: #fffaf4;
+  --secondary-foreground: #f9f5ea;
+  --destructive: #b83b2f;
+  --input-border: #cfc8ba;
+  --navy: #243746;
+  --radius: 0.625rem;
+}
+
+* {
+  border-color: var(--line);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 900px;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: linear-gradient(135deg, #f6f3ec 0%, #ece8df 100%);
+}
+
+button:not(:disabled),
+summary {
+  cursor: pointer;
+}
+
+::selection {
+  color: var(--primary-foreground);
+  background: var(--brand);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--brand);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: #a8a398;
+  background-clip: padding-box;
+}
