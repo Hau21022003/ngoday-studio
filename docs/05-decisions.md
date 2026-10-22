@@ -83,16 +83,17 @@
 
 ### D-013 — Rename trong Flow là cổng bắt buộc
 
-**Status:** Blocked by PoC.  
-**Decision:** Phase 2 chỉ được tuyên bố đạt khi đúng asset được rename trong Flow và tên đọc lại đúng sau reload.  
-**Known evidence:** Help Center nói Flow Agent có thể rename specific files, nhưng chưa chứng minh hành vi đủ xác định cho automation.  
-**Consequence:** local rename không được dùng để “lách” acceptance criterion này.
+**Status:** Accepted cho thiết kế; feasibility đã được xác minh bởi minimal image PoC, ngưỡng lặp production chưa đạt.
+**Decision:** Phase 2 chỉ được tuyên bố đạt khi đúng asset được rename trong Flow và exact Rename value đọc lại đúng sau reload. Direct UI là đường mặc định; Flow Agent chỉ là fallback nếu UI này biến mất.
+**Known evidence:** Trên image PoC ngày 2026-10-22, menu của tile có `Đổi tên`; `scene-01-01` tồn tại sau reload trên cùng `data-media-id`. Tile caption có thể vẫn là caption sinh tự động nên không được dùng làm postcondition.
+**Consequence:** local rename không được dùng để “lách” acceptance criterion này. Automation phải dùng nút `Xong`, reload rồi mở lại Rename để read-after-write; batch/unattended vẫn chờ test lặp.
 
 ### D-014 — Tên Flow và tên download là hai postcondition riêng
 
-**Status:** Blocked by PoC.  
-**Decision:** lưu riêng `observed_name` trên Flow và `suggestedFilename`/local filename. App có thể dùng Playwright `saveAs` để đảm bảo tên local, nhưng vẫn phải verify tên Flow.  
-**Reason:** Google Takeout dùng internal ID, nên display name không bảo đảm filename export/download.
+**Status:** Accepted; hành vi đã được quan sát trong minimal image PoC.
+**Decision:** lưu riêng `observed_name` trên Flow, `suggestedFilename` và local canonical filename. App dùng Playwright `saveAs` hoặc filesystem staging để đảm bảo tên local, nhưng vẫn phải verify tên Flow độc lập.
+**Known evidence:** asset có Rename value `scene-01-01`, còn Flow download gợi ý `scene-01-01_20261022230148.jpg`; file JPEG hợp lệ nhưng không có exact canonical basename.
+**Reason:** Flow giữ scene prefix nhưng tự thêm timestamp; display name không bảo đảm exact filename export/download.
 
 ### D-015 — Queue bền vững trong SQLite
 
@@ -197,6 +198,8 @@ Cần chốt các default có trong account tại thời điểm PoC:
 App phải lưu snapshot thực tế, không hard-code feature theo tài liệu marketing.
 
 ### Q10 — Phương pháp rename chấp nhận được
+
+**Kết quả PoC tối thiểu:** direct deterministic UI rename tồn tại và đã PASS trên một image asset; Flow Agent chưa cần dùng. Câu hỏi về fallback chỉ còn áp dụng nếu Google bỏ/thay đổi direct UI hoặc khi test video/reference cho kết quả khác.
 
 Thứ tự đề xuất:
 
