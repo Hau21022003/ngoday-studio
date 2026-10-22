@@ -129,7 +129,9 @@ Hệ quả: khả năng thao tác là hợp lý về mặt UI, nhưng độ ổn
 - Không có AI credit nào được chủ động tiêu thụ: không click `Bắt đầu tạo`, không có generation và không retry.
 - Go/No-Go tổng thể vẫn `PENDING`; các cổng mapping, asset rename sau reload và download chưa được kiểm chứng.
 
-### Trạng thái capability hiện tại
+### Trạng thái capability sau vòng UI Discovery đầu tiên
+
+Đây là snapshot lịch sử. Lỗi project title đã được xử lý và kiểm chứng lại tại mục 2.3.
 
 | Capability | Trạng thái |
 | --- | --- |
@@ -147,6 +149,163 @@ Hệ quả: khả năng thao tác là hợp lý về mặt UI, nhưng độ ổn
 | Reload verification của asset name | `NOT TESTED` |
 | Download và filename | `NOT TESTED` |
 | Go/No-Go tổng thể | `PENDING` |
+
+## 2.3. Kết quả thực tế — Preflight cho một image generation
+
+**Ngày kiểm tra:** 2026-10-22
+
+**Phạm vi vòng kiểm tra:** sửa workflow lưu project title, xác minh lại project identity, chọn image mode và output `x1`, ghi media baseline. Dừng trước khi nhập prompt dùng cho generation và trước nút `Bắt đầu tạo`; không tiêu credit, không retry và không thao tác asset.
+
+### Sửa lỗi lưu project title
+
+Google Flow Help hiện hướng dẫn rename project trên dashboard: chọn Edit của đúng project, nhập tên rồi chọn nút xác nhận. Input tiêu đề bên trong project không phải workflow rename đã được tài liệu hóa.
+
+PoC mới thực hiện:
+
+1. Tìm project bằng exact `/project/{id}` đã ghi trong state.
+2. Chỉ dùng parent trực tiếp của link này sau khi xác minh parent chứa đúng một Edit và một Delete.
+3. Click `Chỉnh sửa tiêu đề dự án`.
+4. Fill input duy nhất trong card và click `Lưu tiêu đề dự án`.
+5. Reload dashboard, tìm lại bằng cùng project ID, mở lại và đọc tên trong project.
+
+Kết quả: tên `ngoday-poc-ui-20261022-01` tồn tại sau reload và reopen. Nhánh idempotent cũng được kiểm tra: nếu card đã có đúng tên thì không click Save đang disabled, chỉ reload/reopen để verify.
+
+### Preflight không tiêu credit
+
+| Kiểm tra | Kết quả | Bằng chứng thực tế |
+| --- | --- | --- |
+| Rename project qua dashboard | `PASS` | Đúng card PoC đổi từ tên mặc định sang `ngoday-poc-ui-20261022-01`; tên tồn tại sau dashboard reload và đọc lại trong project. |
+| Không tác động project khác | `PASS` | Locator bắt đầu từ exact project href rồi scope vào direct parent; không dùng `nth()`, tọa độ hoặc tên mặc định. |
+| Agent mode | `PASS` cho precondition | `aria-pressed=false`; Agent không được bật. |
+| Image mode | `PASS` | Radio `Hình ảnh` có `aria-checked=true`. |
+| Output count tối thiểu | `PASS` | Chuyển từ `x2` sang `x1`; sau restart, settings vẫn xác nhận `aria-checked=true` và summary `Nano Banana 2.1 · 16:9 · x1`. |
+| Credit indicator | `OBSERVED` | Settings hiển thị `0 tín dụng` cho cấu hình hiện tại. Đây là UI snapshot, không phải cam kết chi phí lâu dài; phải đọc lại ngay trước submit. |
+| Media baseline | `PASS` | Project chưa có asset ID/media ID/generation ID trong DOM; `visibleVideos=0`, `visibleCanvases=0`. Một image chung của UI được quan sát nhưng không có generation tile/asset identity. |
+| Submit/generation | `NOT TESTED` | Không click `Bắt đầu tạo`; command `generate`/`submit` vẫn bị chặn. |
+| Mapping output | `NOT TESTED` | Chưa có output. Baseline trống và `x1` sẽ giảm độ mơ hồ cho lần test được duyệt. |
+| Asset rename trong Flow | `NOT TESTED` | Chưa có asset test. Sau generation sẽ ưu tiên direct UI; chỉ đánh giá Flow Agent nếu direct UI không tồn tại. |
+| Download và xác minh file | `NOT TESTED` | Chưa có asset test để download. |
+
+Prompt dự kiến cho đúng một generation:
+
+```text
+scene-01-01: A single red origami paper boat centered on a plain matte white tabletop, soft daylight from the left, clean minimal composition, no people, no text, 16:9.
+```
+
+Prompt này chưa được submit. Trước lần click duy nhất, PoC phải đọc lại: đúng project ID/name, `Image`, `x1`, model/aspect ratio, credit label, baseline và exact prompt. Nếu bất kỳ precondition nào thay đổi hoặc không xác định được thì dừng.
+
+### Trạng thái capability tại cuối preflight
+
+| Capability | Trạng thái |
+| --- | --- |
+| Manual login và persistent session | `PASS` |
+| Tạo, đặt tên và mở lại đúng project | `PASS` cho workflow tối thiểu |
+| Prompt editor fill-only | `PASS` |
+| Image mode + một output | `PASS` |
+| Character reference | `NOT TESTED` và không cần cho image PoC tối thiểu |
+| One-image generation | `WAITING FOR USER APPROVAL` |
+| Scene → output mapping | `NOT TESTED` |
+| Direct UI/Flow Agent asset rename | `NOT TESTED` |
+| Reload verification của asset name | `NOT TESTED` |
+| Download, filename, MIME/hash | `NOT TESTED` |
+| Go/No-Go tổng thể | `PENDING` |
+
+### Rủi ro còn lại và quyết định tạm thời
+
+- `0 tín dụng` là giá trị UI hiện tại; Google nêu chi phí/availability có thể thay đổi. Không dựa vào tài liệu hoặc lần đọc cũ để submit.
+- Mapping chỉ có thể được nâng thành PASS nếu sau submit xuất hiện đúng một output mới và có tín hiệu nhận dạng đủ để tìm lại sau reload. Nếu output count khác `x1` hoặc có tile mơ hồ, dừng.
+- Project rename PASS không suy ra asset rename PASS; hai UI/workflow khác nhau.
+- Go/No-Go tổng thể vẫn `PENDING`. Chỉ cân nhắc `GO có điều kiện` sau khi generation duy nhất, mapping, rename sau reload và download/hash đều được xác minh trên cùng asset.
+
+## 2.4. Kết quả thực tế — Minimal image workflow end-to-end
+
+**Ngày kiểm tra:** 2026-10-22
+
+**Phạm vi vòng kiểm tra:** đúng một image generation đã được người dùng duyệt, sau đó dùng duy nhất output đó để kiểm tra mapping, direct UI rename, reload verification và download `1K` original. Không generate lại, không upscale, không dùng Flow Agent, không dùng private API và không triển khai Phase 1.
+
+### Generation và output
+
+Ngay trước submit, PoC xác minh lại đúng project `ngoday-poc-ui-20261022-01`, Agent tắt, cấu hình `Nano Banana 2.1 · 16:9 · x1`, credit label `0 tín dụng`, media baseline chưa có asset và exact prompt đã duyệt. State được ghi ở trạng thái `armed` trước click để ngăn retry mơ hồ.
+
+```text
+scene-01-01: A single red origami paper boat centered on a plain matte white tabletop, soft daylight from the left, clean minimal composition, no people, no text, 16:9.
+```
+
+PoC click `Bắt đầu tạo` đúng một lần. Kết quả xuất hiện đúng một `flow-image-tile` và đúng một phần tử có `data-media-id`; số ảnh visible tăng từ 1 ảnh UI lên 2. Không có video/canvas mới. File tải về sau cùng giải mã thành công và nội dung đúng là một thuyền giấy đỏ trên mặt bàn sáng.
+
+PoC không thu được timeline riêng cho các trạng thái pending/generating. Vì vậy generation terminal/output là `PASS` cho run tối thiểu, còn khả năng theo dõi chi tiết từng trạng thái progress vẫn là `NOT TESTED`.
+
+### Mapping scene → asset
+
+- Mapping dùng quan hệ `generationAttempt.id` → `scene-01-01` → đúng một `data-media-id` mới trong project baseline trống, cấu hình `x1` và concurrency 1.
+- Sau reload, đúng media ID đó vẫn xuất hiện một lần. Mapping không dựa vào vị trí tile, caption hay tọa độ.
+- Kết quả: `PASS` với confidence cao cho **một project trống, một attempt, một output**.
+- Chưa thể suy rộng thành PASS cho nhiều output hoặc nhiều attempt gần nhau. Cần diff tập media ID trước/sau và giữ concurrency 1 trong MVP; trạng thái mơ hồ phải dừng.
+
+### Direct UI rename trong Flow
+
+Menu `Tuỳ chọn khác` của chính tile đã mapping có action `Đổi tên`, nên không cần Flow Agent. Rename editor ban đầu hiển thị `Red origami boat on tabletop`; PoC đặt tên `scene-01-01`.
+
+Một chi tiết quan trọng: text/accessible name hiển thị trên tile có thể tiếp tục là caption sinh tự động và không phải nguồn xác minh tên file. Lần kiểm tra đầu dùng caption làm postcondition đã timeout dù rename thực tế đã persist. Sau một reload độc lập, PoC mở lại `Đổi tên` của cùng media ID và đọc được exact value `scene-01-01`, sau đó click `Huỷ` để không ghi thêm. Editor cũng cung cấp nút semantic `Xong`; implementation tiếp theo phải dùng nút này khi save và dùng giá trị trong Rename editor cho read-after-write.
+
+Kết quả direct UI rename: `PASS` cho run tối thiểu. Media ID không đổi qua rename/reload. Flow Agent: `NOT TESTED` và không cần cho đường ảnh đã kiểm chứng.
+
+### Download và xác minh file
+
+Action `Tải xuống` là menu cha, không phát download ngay. Nó mở submenu:
+
+- `1K Kích thước gốc`;
+- `2K Đã tăng độ phân giải`;
+- `4K Đã tăng độ phân giải`.
+
+PoC chỉ chọn `1K Kích thước gốc`; không chọn upscale. Playwright nhận đúng một download event và lưu file trong thư mục ignored `downloads/`.
+
+| Kiểm tra | Kết quả thực tế |
+| --- | --- |
+| Đúng asset | `PASS` — download bắt đầu từ tile có media ID đã mapping và rename-verified |
+| File tồn tại/không rỗng | `PASS` — 46.207 byte |
+| Signature/giải mã | `PASS` — JPEG, mở/giải mã được và nội dung khớp prompt |
+| Kích thước/pixel format | `1376 × 768`, 24-bit RGB |
+| SHA-256 | `413a9523305980db2528ee9093a6fb682456b0610f03f9ea819be4cf428617ab` |
+| Suggested filename | `scene-01-01_20261022230148.jpg` |
+| Giữ exact canonical filename | `FAIL` — Flow tự thêm timestamp |
+| Giữ scene identity trong filename | `PASS` — filename bắt đầu bằng exact `scene-01-01_` |
+
+Lần chờ download đầu tiên đã timeout vì PoC ban đầu nhầm `Tải xuống` là action cuối; quan sát UI cho thấy click đó chỉ mở submenu và không tạo file. Sau khi xác định semantic control `1K Kích thước gốc`, PoC tiếp tục cùng workflow, không generate hoặc upscale thêm.
+
+### Bảng capability mới nhất
+
+| Capability | Trạng thái | Giới hạn |
+| --- | --- | --- |
+| Manual login + persistent session | `PASS` | Session hết hạn tự nhiên theo thời gian chưa test |
+| Tạo, đặt tên, reload và mở đúng project | `PASS` | Một project PoC |
+| Điền prompt/chọn Image `x1` | `PASS` | UI tiếng Việt, Nano Banana 2.1, 16:9 |
+| Đúng một image generation | `PASS` | Một run; `submitClicks=1`; credit label trước submit là `0 tín dụng` |
+| Progress states | `NOT TESTED` | Chỉ xác minh submit và terminal output, chưa ghi timeline pending/generating |
+| Scene → output mapping | `PASS` có điều kiện | Baseline trống, concurrency 1, output `x1`; chưa test batch |
+| Direct UI asset rename | `PASS` | Exact Rename value tồn tại sau reload trên cùng media ID |
+| Flow Agent rename | `NOT TESTED` | Không cần vì direct UI có sẵn |
+| Download đúng asset | `PASS` | Chỉ image `1K original`; JPEG/hash/visual decode hợp lệ |
+| Flow giữ exact filename khi download | `FAIL` | Flow thêm suffix timestamp; local canonicalization là bắt buộc |
+| Video generation | `NOT TESTED` | Không được duyệt trong run này |
+| Character reference | `NOT TESTED` | Không cần cho prompt test này |
+| Pause/resume/reconcile sau crash | `PARTIAL` | Generation/download có state guard; chưa mô phỏng crash/pending thật |
+
+### Go/No-Go và phạm vi kết luận
+
+- **GO có điều kiện cho tính khả thi của supervised Playwright image workflow:** chuỗi project → prompt → một generation → mapping → direct UI rename → reload verify → download đã chạy end-to-end trên cùng asset.
+- **NO-GO cho unattended/batch automation ở thời điểm này:** chỉ có một run; chưa đạt ngưỡng lặp 5/10 trong mục 6–7, chưa test progress state, video, character reference, nhiều output, duplicate names, retry/reconcile hoặc selector stability theo thời gian.
+- **Phase 1–3 chưa được triển khai.** Kết quả này chỉ gỡ blocker “direct asset rename có tồn tại/đọc lại được hay không”. Chỉ bắt đầu phase tiếp theo sau khi người dùng review.
+- App tương lai phải coi `flowName`, `suggestedFilename` và local canonical filename là ba field riêng. Với file hiện tại, local export nên chuẩn hóa về `scene-01-01.jpg` bằng `saveAs`/filesystem và kiểm tra hash; không được tuyên bố Flow trả exact canonical filename.
+
+### Rủi ro còn lại
+
+- `data-media-id`, custom element `flow-image-tile` và accessible labels là UI contract không công khai; cần health check và fail-closed khi count khác 1.
+- Tile caption và Rename value là hai khái niệm khác nhau. Xác minh rename bằng caption tạo false negative.
+- Download có submenu resolution. Locator phải chọn rõ `1K original`; không mặc định click lựa chọn 2K/4K vì có thể phát sinh upscale/chi phí/hành vi khác.
+- Mapping hiện chắc chắn nhờ project trống + `x1`. Project đã có nhiều asset cần baseline tập ID, attempt checkpoint và reconciliation.
+- Suggested filename có timestamp. Nếu không normalize local theo manifest, CapCut export sẽ không có exact canonical name.
+- Locale/A-B rollout có thể đổi label Việt/Anh; không được fallback sang tọa độ hoặc `nth()`.
 
 ## 3. Giới hạn an toàn và tuân thủ
 
@@ -407,6 +566,8 @@ Dừng PoC hoặc chuyển về người dùng ngay khi:
 ## 11. Nguồn chính thức được kiểm tra ngày 2026-10-22
 
 - [Manage your Google Flow projects, assets & collections](https://support.google.com/flow/answer/16935308?hl=en)
+- [Manage your Google Flow credits](https://support.google.com/flow/answer/16526234?hl=en)
+- [Learn about Google Flow models & supported features](https://support.google.com/flow/answer/16352836?hl=en)
 - [Use the Google Flow Agent](https://support.google.com/flow/answer/17093911?hl=en)
 - [Get started with Google Flow](https://support.google.com/flow/answer/16353333?hl=en)
 - [Where you can use Google Flow](https://support.google.com/flow/answer/16353544?hl=en)
