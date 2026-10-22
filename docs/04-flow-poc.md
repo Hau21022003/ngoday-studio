@@ -30,6 +30,124 @@ Tại thời điểm kiểm tra 2026-10-22:
 
 Hệ quả: khả năng thao tác là hợp lý về mặt UI, nhưng độ ổn định, auth, asset identity, rename và download filename đều phải được PoC; không được coi là hợp đồng API.
 
+## 2.1. Kết quả thực tế — Manual Authentication và session reuse
+
+**Ngày kiểm tra:** 2026-10-22
+**Phạm vi vòng kiểm tra:** chỉ P1 — mở Chrome, đăng nhập thủ công, tái sử dụng session và dừng khi thiếu session. Chưa kiểm tra project, generation, mapping, rename hoặc download.
+
+### Cấu hình đã kiểm tra
+
+- Windows interactive session, Chrome cài sẵn phiên bản `155.0.8059.85`.
+- Profile riêng: `%LOCALAPPDATA%\NgodayStudio\GoogleFlowChromeProfile`.
+- Chế độ `npm run auth` mở Chrome executable trực tiếp với profile riêng, không dùng Playwright và không bật remote debugging.
+- Chế độ `npm start` dùng `playwright-core 1.64.1`, `channel: "chrome"`, `headless: false`, cùng profile và `chromiumSandbox: true`.
+- Không lưu/điền credential; không dùng stealth, private API, cookie export hoặc Chrome profile mặc định.
+
+### Kết quả quan sát
+
+| Kiểm tra | Kết quả | Bằng chứng thực tế |
+| --- | --- | --- |
+| Đăng nhập bên trong Chrome do Playwright mở, cấu hình cũ | `FAIL` | Google chuyển tới `accounts.google.com/.../signin/rejected` với thông báo browser/app có thể không an toàn. Cách này đã bị loại bỏ. |
+| Chrome manual dùng đúng profile riêng | `PASS` | Process dùng custom `user-data-dir`; không có `--no-sandbox`, remote debugging hoặc automation flag. |
+| Đăng nhập Google Flow thủ công | `PASS` | Người dùng đăng nhập và mở Flow trong Chrome manual; script không quan sát credential. |
+| Playwright tái sử dụng session | `PASS` cho P1 | 3/3 lần khởi động Playwright độc lập mở thẳng `https://flow.google.com/` và xác minh Flow app, không chuyển sang login/security challenge. |
+| Session sau reload | `PASS` | Reload trong automation context vẫn ở `https://flow.google.com/`, `signedOut: false`, `securityChallenge: false`. |
+| Chromium sandbox | `PASS` | Process Playwright dùng profile riêng và không còn flag `--no-sandbox`; remote debugging pipe vẫn tồn tại vì đây là transport điều khiển bình thường của Playwright. |
+| Dừng khi không có session | `PASS` cho đường phát hiện | Chạy với một profile trống tách biệt trả `STOPPED: AUTH_REQUIRED`, đóng browser và không mở CLI automation. Không có thao tác đăng nhập tự động. |
+| Session hết hạn thật theo thời gian | `NOT TESTED` | Mới mô phỏng trạng thái thiếu session bằng profile trống; chưa chờ cookie hết hạn hoặc chủ động làm hết hạn session thật. |
+
+### Kết luận giới hạn
+
+- Cổng P1 về manual authentication và persistent session đạt trên máy/tài khoản đã thử với ngưỡng 3/3 lần khởi động.
+- Đây **không phải** kết luận Go cho toàn bộ Flow automation. P2–P9, đặc biệt mapping và rename asset trong Flow, vẫn chưa được kiểm chứng.
+- Flow UI đổi giữa tiêu đề tiếng Việt và tiếng Anh qua các lần load; locator auth/app hiện hỗ trợ hai ngôn ngữ ở mức tối thiểu nhưng vẫn có rủi ro khi Google đổi text/A-B test.
+- Profile chứa session nhạy cảm, nằm ngoài repository và không được đưa vào backup/diagnostic bundle. Hai chế độ manual và Playwright không được mở đồng thời vì Chrome khóa profile.
+- Nếu một lần chạy sau này gặp `AUTH_REQUIRED` hoặc security challenge, quy trình bắt buộc là đóng Playwright, chạy lại `npm run auth`, xử lý thủ công, đóng Chrome rồi mới resume.
+
+### Trạng thái capability ngay sau riêng vòng P1
+
+Đây là snapshot trước UI Discovery. Kết quả mới hơn được ghi ở mục 2.2.
+
+| Capability | Trạng thái |
+| --- | --- |
+| Manual login bằng Chrome thật | `PASS` |
+| Persistent profile/session reuse | `PASS` trong 3 lần thử liên tiếp |
+| Fail-closed khi thiếu session | `PASS` với profile trống |
+| Project create/reopen | `NOT TESTED` |
+| Image/video/reference generation | `NOT TESTED` |
+| Scene → asset mapping | `NOT TESTED` |
+| Direct UI/Flow Agent rename | `NOT TESTED` |
+| Reload verification của asset name | `NOT TESTED` |
+| Download và filename | `NOT TESTED` |
+| Go/No-Go tổng thể | `PENDING` |
+
+## 2.2. Kết quả thực tế — Flow UI Discovery
+
+**Ngày kiểm tra:** 2026-10-22
+
+**Phạm vi vòng kiểm tra:** dùng lại session P1 để khảo sát dashboard, tạo và mở một project PoC, đọc control trong project và chỉ điền prompt. Không bấm Generate, không chọn mode/reference, không thao tác asset và không dùng private API.
+
+### Project PoC và giới hạn an toàn
+
+- Tên dự kiến: `ngoday-poc-ui-20261022-01`.
+- Flow tạo project thành công và cấp URL riêng dạng `/project/{id}`. URL đầy đủ chỉ lưu trong `.runtime/state.json`, không đưa vào tài liệu/repository.
+- Flow đặt tên mặc định `Tháng 10 22 - 17:52`. Thử điền tên dự kiến rồi `blur` không được lưu; reload trả lại tên mặc định. Không thử phím Enter, menu hoặc thao tác khác vì chưa có bằng chứng về cơ chế save.
+- Project PoC vẫn còn trong Flow với tên mặc định. PoC không đổi tên/xóa project hoặc asset đã tồn tại trước kiểm tra và cũng không tự xóa project vừa tạo.
+- Prompt test là `POC_NO_GENERATE: A red paper boat on a clean white table, soft daylight.`. Nội dung được điền vào editor, sau đó bị bỏ khi điều hướng khỏi trang; không submit.
+
+### Kết quả quan sát
+
+| Kiểm tra | Kết quả | Bằng chứng thực tế |
+| --- | --- | --- |
+| Tái sử dụng session cho vòng UI Discovery | `PASS` | Chrome thật mở headful với persistent profile P1; vào Flow không gặp login/security challenge. |
+| Khảo sát danh sách project | `PASS` | Dashboard hiển thị hai project có sẵn trước test, link “Mở dự án”, các control edit/delete và một nút duy nhất `Dự án mới`. Chỉ đọc DOM; không mở menu edit/delete. |
+| Tạo project mới | `PASS` | Click đúng một button có accessible name `Dự án mới`; Flow điều hướng từ dashboard sang một URL `/project/{id}` mới và URL được ghi vào state. |
+| Đặt tên test dễ nhận diện | `FAIL` | Ô tiêu đề được nhận diện là input text có `aria-label="Văn bản có thể chỉnh sửa"`; `fill` + `blur` thay đổi tạm thời nhưng reload trả lại `Tháng 10 22 - 17:52`. PoC dừng thử nghiệm cơ chế save tại đây, không đoán thêm thao tác. |
+| Mở lại trực tiếp bằng URL đã ghi | `PASS` | Nhiều lần khởi động/reload điều hướng lại đúng `/project/{id}`, vẫn authenticated và nhận diện là project page. |
+| Mở từ dashboard | `PASS` cho identity/navigation | Locator dùng đúng `href` của project ID đã ghi, tìm thấy đúng một link và điều hướng về đúng URL. Lệnh tổng hợp báo mismatch vì tên dự kiến không được lưu; `status` ngay sau đó xác nhận URL project chính xác. |
+| Nhận diện prompt editor | `PASS` | Đúng một `role=textbox`, `contenteditable=true`, accessible name `Bạn muốn tạo những gì?`. |
+| Chỉ điền prompt | `PASS` | Nội dung đọc lại khớp 100%; log ghi `submitControlsObserved: 1` và `submitClicked: false`. |
+| Chọn image/video mode | `NOT TESTED` | Không mở/chọn mode để tránh thao tác không chắc chắn trong vòng discovery. |
+| Character reference | `NOT TESTED` | Không attach hoặc thao tác reference. |
+| Generate/submit | `NOT TESTED` | Cố ý không click button `Bắt đầu tạo`; PoC không có command generate. Không có generation/retry. |
+| Theo dõi progress và nhận diện asset | `NOT TESTED` | Không có generation nên không có output để đối chiếu. |
+| Đổi tên asset trong Flow | `NOT TESTED` | Lỗi lưu **project title** không phải kết quả kiểm tra asset rename. Không asset nào được chọn hoặc đổi tên. |
+| Download/filename | `NOT TESTED` | Không có asset PoC để download. |
+
+### Locator và hành vi UI đã ghi nhận
+
+- Dashboard: ưu tiên `getByRole('button', { name: /new project|dự án mới/i })`; project PoC được mở lại bằng `href` chứa đúng project ID đã ghi, không dựa vào vị trí card hoặc tên mặc định.
+- Project title: nhận diện bằng tập `input[type="text"][aria-label]`, loại control Search theo accessible name và bắt buộc còn đúng một input visible. Có một race khi React chưa gắn input; PoC chuyển sang auto-wait có timeout rồi mới kiểm tra uniqueness, không dùng tọa độ.
+- Prompt: `getByRole('textbox', { name: /what do you want to create|bạn muốn tạo những gì/i })`; command chỉ chấp nhận prompt có prefix `POC_NO_GENERATE:` và không chứa code submit.
+- UI hiện dùng tiếng Việt. Accessible text vẫn là rủi ro khi đổi locale/A-B test; project ID trong URL là tín hiệu identity bền hơn tên/card position.
+
+### Kết luận vòng UI Discovery
+
+- Discovery dashboard, tạo project, xác định project bằng URL, mở lại và điền prompt không submit đều khả thi với locator ngữ nghĩa.
+- P2 **chưa đạt** acceptance hiện có vì tên test không persist và chưa kiểm tra mở lại 3/3 từ dashboard. Không được nâng trạng thái “Project lifecycle” thành PASS tổng thể.
+- Việc lưu project title cần một PoC có giám sát riêng hoặc quan sát tài liệu/UI rõ hơn trước khi thử thao tác khác. Kết quả này không suy ra khả năng asset rename.
+- Không có AI credit nào được chủ động tiêu thụ: không click `Bắt đầu tạo`, không có generation và không retry.
+- Go/No-Go tổng thể vẫn `PENDING`; các cổng mapping, asset rename sau reload và download chưa được kiểm chứng.
+
+### Trạng thái capability hiện tại
+
+| Capability | Trạng thái |
+| --- | --- |
+| Manual login bằng Chrome thật | `PASS` |
+| Persistent profile/session reuse | `PASS` |
+| Dashboard discovery | `PASS` |
+| Tạo project và ghi identity URL | `PASS` |
+| Lưu tên project PoC dễ nhận diện | `FAIL` với `fill` + `blur` |
+| Mở project bằng URL | `PASS` |
+| Mở project từ dashboard bằng exact project href | `PASS` cho navigation; title assertion `FAIL` |
+| Điền prompt nhưng không submit | `PASS` |
+| Image/video mode và character reference | `NOT TESTED` |
+| Generation/progress/output mapping | `NOT TESTED` |
+| Direct UI/Flow Agent asset rename | `NOT TESTED` |
+| Reload verification của asset name | `NOT TESTED` |
+| Download và filename | `NOT TESTED` |
+| Go/No-Go tổng thể | `PENDING` |
+
 ## 3. Giới hạn an toàn và tuân thủ
 
 - Người dùng tự xem xét và chấp nhận Google Terms, policy của Flow và điều kiện tài khoản trước khi chạy PoC.

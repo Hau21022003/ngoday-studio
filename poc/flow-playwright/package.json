@@ -1,0 +1,15 @@
+{
+  "name": "ngoday-flow-playwright-poc",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Small, supervised Playwright PoC for Google Flow",
+  "type": "module",
+  "scripts": {
+    "auth": "node ./manual-auth.mjs",
+    "start": "node ./flow-poc.mjs",
+    "check": "node --check ./poc-config.mjs && node --check ./manual-auth.mjs && node --check ./flow-poc.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.64.1"
+  }
+}
