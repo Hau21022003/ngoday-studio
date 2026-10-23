@@ -8,6 +8,17 @@ Trang `Templates` là design source of truth cho toàn bộ sản phẩm. Mọi 
 
 Foundation hiện chỉ dùng dữ liệu mock. Không có database, persistence, IPC nghiệp vụ hoặc business logic Phase 1.
 
+## M1 review routes
+
+M1 dùng query parameter chỉ dành cho review để tái hiện các state của Templates mà không thêm debug control vào giao diện:
+
+- Ready: `/#templates`
+- Empty: `/?demo=empty#templates`
+- Loading: `/?demo=loading#templates`
+- Error + retry: `/?demo=error#templates`
+
+Detail panel là read-only trong M1. Tab đang mở được phản ánh bằng `detail=overview|content|variables|history`. Nút tạo mới, chỉnh sửa và business action thuộc M2; M1 không ghi dữ liệu và không gọi IPC nghiệp vụ.
+
 ## Tokens
 
 Token được khai báo tại `src/renderer/src/styles/globals.css`, sau đó ánh xạ vào Tailwind CSS v4 bằng `@theme inline`.

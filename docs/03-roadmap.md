@@ -38,9 +38,10 @@ Tạo một workflow local đáng tin cậy cho Episode, prompt, script, scene v
 
 ### Trạng thái hiện tại
 
-- Implementation mới của Phase 1 bắt đầu từ trạng thái hiện tại trên branch `master`.
+- Implementation mới của Phase 1 bắt đầu từ baseline đã chốt trong repository này.
 - Mọi implementation Phase 1 cũ hoặc thử nghiệm không phải baseline và không bắt buộc reuse. Chỉ tham khảo hoặc tái sử dụng phần phù hợp sau khi được đánh giá chủ động theo milestone đang thực hiện.
-- M1–M8 ở trạng thái planned, chưa triển khai theo baseline mới.
+- **M1 — Approved/Completed ngày 2026-10-23.** Visual direction, density, responsive behavior và browse/detail structure của Templates đã được người dùng duyệt và trở thành baseline cho các milestone sau.
+- M2–M8 ở trạng thái planned. M2 chưa bắt đầu và chỉ được triển khai khi có yêu cầu tiếp theo từ người dùng.
 - Không có milestone database/persistence nào được phép bắt đầu trước khi M4 qua điểm dừng review.
 
 ### M1 — UI Foundation + Templates Browse

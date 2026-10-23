@@ -37,7 +37,7 @@ function EmptyState({ action }: { action?: ReactNode }) {
     <StateFeedback
       icon={FileQuestion}
       title="Chưa có dữ liệu"
-      description="Thay đổi bộ lọc hoặc tạo mục đầu tiên để bắt đầu."
+      description="Thay đổi bộ lọc hoặc thử lại với từ khóa khác."
       action={action}
     />
   )

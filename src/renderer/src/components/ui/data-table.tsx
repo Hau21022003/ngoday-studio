@@ -41,6 +41,7 @@ type DataTableColumn<TData> = {
   header: ReactNode
   cell: (row: TData) => ReactNode
   sortValue?: (row: TData) => DataTableSortValue
+  sortable?: boolean
   searchableValue?: (row: TData) => string
   width?: string
   align?: "left" | "center" | "right"
@@ -73,6 +74,7 @@ type DataTableLabels = {
   clearSort: string
   goToNextPage: string
   goToPreviousPage: string
+  loading: string
   page: string
   rowsPerPage: string
   selectAllRows: string
@@ -114,6 +116,7 @@ const defaultLabels: DataTableLabels = {
   clearSort: "Bỏ sắp xếp",
   goToNextPage: "Trang sau",
   goToPreviousPage: "Trang trước",
+  loading: "Đang tải dữ liệu…",
   page: "trang",
   rowsPerPage: "Số dòng mỗi trang",
   selectAllRows: "Chọn tất cả dòng trên trang này",
@@ -171,16 +174,20 @@ function DataTableCheckbox({
   }, [indeterminate])
 
   return (
-    <input
-      ref={inputRef}
-      type="checkbox"
-      aria-label={label}
-      checked={checked}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.checked)}
+    <label
+      className="inline-flex size-7 items-center justify-center rounded focus-within:ring-2 focus-within:ring-ring/35 focus-within:ring-offset-2 focus-within:ring-offset-surface"
       onClick={(event) => event.stopPropagation()}
-      className="size-3.5 rounded border-input accent-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-40"
-    />
+    >
+      <input
+        ref={inputRef}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="size-3.5 rounded border-input accent-accent focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+      />
+      <span className="sr-only">{label}</span>
+    </label>
   )
 }
 
@@ -330,14 +337,26 @@ function DataTable<TData>({
   const pageEnd = paginationEnabled
     ? Math.min((pageIndex + 1) * pageSize, sortedRows.length)
     : sortedRows.length
+  const hasFullWidthState = error || (!isLoading && visibleRows.length === 0)
 
   return (
     <div className={cn("space-y-3", className)}>
       {toolbar && (typeof toolbar === "function" ? toolbar(toolbarContext) : toolbar)}
 
       <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-panel">
+        {isLoading && (
+          <p role="status" aria-live="polite" className="sr-only">
+            {labels.loading}
+          </p>
+        )}
         <TableContainer className="overscroll-x-contain">
-          <Table className={cn("min-w-[760px] table-fixed", tableClassName)}>
+          <Table
+            className={cn(
+              "table-fixed",
+              hasFullWidthState ? "min-w-full" : "min-w-[760px]",
+              tableClassName,
+            )}
+          >
             <caption className="sr-only">{caption}</caption>
             <colgroup>
               {rowSelection && <col className="w-10" />}
@@ -359,6 +378,7 @@ function DataTable<TData>({
                   </TableHead>
                 )}
                 {columns.map((column) => {
+                  const canSort = Boolean(column.sortValue && column.sortable !== false)
                   const isSorted = resolvedSorting?.columnId === column.id
                   const ariaSort = !isSorted
                     ? "none"
@@ -369,10 +389,10 @@ function DataTable<TData>({
                   return (
                     <TableHead
                       key={column.id}
-                      aria-sort={column.sortValue ? ariaSort : undefined}
+                      aria-sort={canSort ? ariaSort : undefined}
                       className={cn(alignmentClasses[column.align ?? "left"], column.headerClassName)}
                     >
-                      {column.sortValue ? (
+                      {canSort ? (
                         <button
                           type="button"
                           onClick={() => updateSorting(column)}

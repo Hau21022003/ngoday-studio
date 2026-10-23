@@ -1,12 +1,15 @@
 import {
-  ArrowRight,
-  Copy,
+  CalendarClock,
+  ChartNoAxesColumnIncreasing,
+  CircleDot,
   Info,
+  Layers3,
   MoreVertical,
-  PencilLine,
   Plus,
+  UserRound,
+  type LucideIcon,
 } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -30,6 +33,9 @@ import { TemplateThumbnail, type ThumbnailKind } from "@/components/ui/template-
 
 type Category = "all" | "script" | "thumbnail" | "hook" | "description" | "idea" | "other"
 type Purpose = Exclude<Category, "all" | "other">
+type DetailTab = "overview" | "content" | "variables" | "history"
+type DemoState = "ready" | "empty" | "loading" | "error"
+type SortOption = "updated-desc" | "updated-asc" | "name-asc" | "name-desc"
 
 type TemplateItem = {
   id: string
@@ -42,17 +48,13 @@ type TemplateItem = {
   status: string
   statusTone: StatusTone
   thumbnail: ThumbnailKind
+  usageCount: number
 }
 
-const categoryTabs: readonly TabItem<Category>[] = [
-  { value: "all", label: "Tất cả" },
-  { value: "script", label: "Script" },
-  { value: "thumbnail", label: "Thumbnail" },
-  { value: "hook", label: "Hook" },
-  { value: "description", label: "Mô tả" },
-  { value: "idea", label: "Ý tưởng" },
-  { value: "other", label: "Khác" },
-]
+type TemplateVariable = {
+  name: string
+  description: string
+}
 
 const templates: TemplateItem[] = [
   {
@@ -66,6 +68,7 @@ const templates: TemplateItem[] = [
     status: "Đang dùng",
     statusTone: "success",
     thumbnail: "desk",
+    usageCount: 24,
   },
   {
     id: "youtube-hook",
@@ -78,6 +81,7 @@ const templates: TemplateItem[] = [
     status: "Đang dùng",
     statusTone: "success",
     thumbnail: "mountain",
+    usageCount: 18,
   },
   {
     id: "thumbnail-concept",
@@ -90,6 +94,7 @@ const templates: TemplateItem[] = [
     status: "Thử nghiệm",
     statusTone: "warning",
     thumbnail: "studio",
+    usageCount: 9,
   },
   {
     id: "video-description",
@@ -102,6 +107,7 @@ const templates: TemplateItem[] = [
     status: "Không hoạt động",
     statusTone: "neutral",
     thumbnail: "notes",
+    usageCount: 6,
   },
   {
     id: "video-idea",
@@ -114,6 +120,7 @@ const templates: TemplateItem[] = [
     status: "Đang dùng",
     statusTone: "success",
     thumbnail: "idea",
+    usageCount: 31,
   },
   {
     id: "short-script",
@@ -126,8 +133,59 @@ const templates: TemplateItem[] = [
     status: "Thử nghiệm",
     statusTone: "warning",
     thumbnail: "laptop",
+    usageCount: 12,
   },
 ]
+
+const categoryTabs: readonly TabItem<Category>[] = [
+  { value: "all", label: `Tất cả (${templates.length})` },
+  { value: "script", label: `Script (${templates.filter((item) => item.purpose === "script").length})` },
+  { value: "thumbnail", label: `Thumbnail (${templates.filter((item) => item.purpose === "thumbnail").length})` },
+  { value: "hook", label: `Hook (${templates.filter((item) => item.purpose === "hook").length})` },
+  { value: "description", label: `Mô tả (${templates.filter((item) => item.purpose === "description").length})` },
+  { value: "idea", label: `Ý tưởng (${templates.filter((item) => item.purpose === "idea").length})` },
+  { value: "other", label: "Khác (0)" },
+]
+
+const detailTabs: readonly TabItem<DetailTab>[] = [
+  { value: "overview", label: "Tổng quan" },
+  { value: "content", label: "Nội dung" },
+  { value: "variables", label: "Biến sử dụng" },
+  { value: "history", label: "Lịch sử" },
+]
+
+const variablesByPurpose: Record<Purpose, TemplateVariable[]> = {
+  script: [
+    { name: "{{topic}}", description: "Chủ đề chính của video" },
+    { name: "{{tone}}", description: "Giọng văn mong muốn" },
+    { name: "{{duration}}", description: "Độ dài mong muốn (phút)" },
+    { name: "{{key_points}}", description: "Các ý chính cần có" },
+  ],
+  thumbnail: [
+    { name: "{{topic}}", description: "Chủ đề chính của video" },
+    { name: "{{subject}}", description: "Chủ thể cần nhấn mạnh" },
+    { name: "{{mood}}", description: "Cảm xúc hình ảnh" },
+    { name: "{{colors}}", description: "Bảng màu mong muốn" },
+  ],
+  hook: [
+    { name: "{{topic}}", description: "Chủ đề chính của video" },
+    { name: "{{audience}}", description: "Khán giả mục tiêu" },
+    { name: "{{tone}}", description: "Giọng điệu của hook" },
+    { name: "{{count}}", description: "Số phương án cần tạo" },
+  ],
+  description: [
+    { name: "{{title}}", description: "Tiêu đề video" },
+    { name: "{{keywords}}", description: "Từ khóa SEO chính" },
+    { name: "{{chapters}}", description: "Danh sách timestamp" },
+    { name: "{{links}}", description: "Liên kết cần đính kèm" },
+  ],
+  idea: [
+    { name: "{{niche}}", description: "Chủ đề hoặc ngách nội dung" },
+    { name: "{{audience}}", description: "Khán giả mục tiêu" },
+    { name: "{{goal}}", description: "Mục tiêu của video" },
+    { name: "{{constraints}}", description: "Giới hạn hoặc yêu cầu riêng" },
+  ],
+}
 
 const purposeTone = {
   script: "attention",
@@ -153,16 +211,28 @@ const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   hour12: false,
   timeZone: "Asia/Ho_Chi_Minh",
 })
+
+const numberFormatter = new Intl.NumberFormat("vi-VN")
+
+function toDate(value: string, time = "12:00:00") {
+  return new Date(`${value}T${time}+07:00`)
+}
+
 function formatDate(value: string) {
-  return dateFormatter.format(new Date(`${value}T12:00:00+07:00`))
+  return dateFormatter.format(toDate(value))
+}
+
+function formatDateTime(value: string) {
+  return dateTimeFormatter.format(toDate(value, "14:30:00"))
 }
 
 const templateColumns: readonly DataTableColumn<TemplateItem>[] = [
   {
     id: "name",
     header: "Template",
-    width: "41%",
+    width: "44%",
     sortValue: (template) => template.name,
+    sortable: false,
     searchableValue: (template) => `${template.name} ${template.description}`,
     cell: (template) => (
       <div className="flex min-w-0 items-center gap-3">
@@ -179,7 +249,7 @@ const templateColumns: readonly DataTableColumn<TemplateItem>[] = [
   {
     id: "purpose",
     header: "Mục đích",
-    width: "14%",
+    width: "15%",
     searchableValue: (template) => template.purposeLabel,
     cell: (template) => (
       <Badge variant={purposeTone[template.purpose]}>{template.purposeLabel}</Badge>
@@ -188,7 +258,7 @@ const templateColumns: readonly DataTableColumn<TemplateItem>[] = [
   {
     id: "version",
     header: "Phiên bản",
-    width: "10%",
+    width: "11%",
     className: "px-2 text-xs font-medium tabular-nums text-muted-foreground",
     headerClassName: "px-2",
     cell: (template) => template.version,
@@ -196,15 +266,16 @@ const templateColumns: readonly DataTableColumn<TemplateItem>[] = [
   {
     id: "updatedAt",
     header: "Cập nhật",
-    width: "14%",
+    width: "15%",
     sortValue: (template) => template.updatedAt,
+    sortable: false,
     className: "text-xs tabular-nums text-muted-foreground",
     cell: (template) => formatDate(template.updatedAt),
   },
   {
     id: "status",
     header: "Trạng thái",
-    width: "16%",
+    width: "15%",
     searchableValue: (template) => template.status,
     cell: (template) => <StatusBadge label={template.status} tone={template.statusTone} />,
   },
@@ -215,32 +286,12 @@ function getSearchParam(name: string, allowed: readonly string[], fallback: stri
   return value && allowed.includes(value) ? value : fallback
 }
 
-function updateTemplateUrl(state: {
-  category: Category
-  templateId: string
-  query: string
-  purpose: string
-  status: string
-  sorting: DataTableSorting | null
-}) {
-  const url = new URL(window.location.href)
-  url.searchParams.set("category", state.category)
-  url.searchParams.set("template", state.templateId)
-  state.query ? url.searchParams.set("q", state.query) : url.searchParams.delete("q")
-  state.purpose !== "all" ? url.searchParams.set("purpose", state.purpose) : url.searchParams.delete("purpose")
-  state.status !== "all" ? url.searchParams.set("status", state.status) : url.searchParams.delete("status")
-  const sortParam = !state.sorting
-    ? "none"
-    : state.sorting.columnId === "updatedAt"
-      ? `updated-${state.sorting.direction}`
-      : `${state.sorting.columnId}-${state.sorting.direction}`
-  sortParam !== "updated-desc" ? url.searchParams.set("sort", sortParam) : url.searchParams.delete("sort")
-  window.history.replaceState(null, "", url)
-}
-
 function getInitialCategory(): Category {
-  const category = new URLSearchParams(window.location.search).get("category")
-  return categoryTabs.some((item) => item.value === category) ? (category as Category) : "all"
+  return getSearchParam(
+    "category",
+    categoryTabs.map((item) => item.value),
+    "all",
+  ) as Category
 }
 
 function getInitialTemplateId() {
@@ -248,21 +299,66 @@ function getInitialTemplateId() {
   return templates.some((template) => template.id === templateId) ? templateId! : templates[0]!.id
 }
 
-function getInitialSorting(): DataTableSorting | null {
-  const value = new URLSearchParams(window.location.search).get("sort")
-  if (value === "none") return null
+function getInitialDetailTab(): DetailTab {
+  return getSearchParam(
+    "detail",
+    detailTabs.map((item) => item.value),
+    "overview",
+  ) as DetailTab
+}
 
-  if (value === "updated-asc") return { columnId: "updatedAt", direction: "asc" }
-  if (value === "updated-desc") return { columnId: "updatedAt", direction: "desc" }
+function getInitialDemoState(): DemoState {
+  return getSearchParam("demo", ["ready", "empty", "loading", "error"], "ready") as DemoState
+}
 
-  const match = value?.match(/^(name|updatedAt)-(asc|desc)$/)
-  if (!match) return { columnId: "updatedAt", direction: "desc" }
-  return { columnId: match[1]!, direction: match[2] as "asc" | "desc" }
+function getInitialSorting(): DataTableSorting {
+  const value = getSearchParam(
+    "sort",
+    ["updated-desc", "updated-asc", "name-asc", "name-desc"],
+    "updated-desc",
+  ) as SortOption
+  return sortingFromOption(value)
+}
+
+function sortingFromOption(value: SortOption): DataTableSorting {
+  if (value === "name-asc") return { columnId: "name", direction: "asc" }
+  if (value === "name-desc") return { columnId: "name", direction: "desc" }
+  return { columnId: "updatedAt", direction: value === "updated-asc" ? "asc" : "desc" }
+}
+
+function optionFromSorting(sorting: DataTableSorting): SortOption {
+  if (sorting.columnId === "name") return sorting.direction === "asc" ? "name-asc" : "name-desc"
+  return sorting.direction === "asc" ? "updated-asc" : "updated-desc"
+}
+
+function updateTemplateUrl(state: {
+  category: Category
+  detailTab: DetailTab
+  templateId: string
+  query: string
+  purpose: string
+  status: string
+  sorting: DataTableSorting
+}) {
+  const url = new URL(window.location.href)
+  url.searchParams.set("category", state.category)
+  url.searchParams.set("template", state.templateId)
+  state.detailTab !== "overview"
+    ? url.searchParams.set("detail", state.detailTab)
+    : url.searchParams.delete("detail")
+  state.query ? url.searchParams.set("q", state.query) : url.searchParams.delete("q")
+  state.purpose !== "all" ? url.searchParams.set("purpose", state.purpose) : url.searchParams.delete("purpose")
+  state.status !== "all" ? url.searchParams.set("status", state.status) : url.searchParams.delete("status")
+  const sortParam = optionFromSorting(state.sorting)
+  sortParam !== "updated-desc" ? url.searchParams.set("sort", sortParam) : url.searchParams.delete("sort")
+  window.history.replaceState(null, "", url)
 }
 
 function TemplatesPage() {
   const [category, setCategory] = useState<Category>(getInitialCategory)
   const [selectedId, setSelectedId] = useState(getInitialTemplateId)
+  const [detailTab, setDetailTab] = useState<DetailTab>(getInitialDetailTab)
+  const [demoState, setDemoState] = useState<DemoState>(getInitialDemoState)
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "")
   const [purpose, setPurpose] = useState(() =>
     getSearchParam("purpose", ["all", "script", "hook", "thumbnail", "description", "idea"], "all"),
@@ -270,12 +366,11 @@ function TemplatesPage() {
   const [status, setStatus] = useState(() =>
     getSearchParam("status", ["all", "success", "warning", "neutral"], "all"),
   )
-  const [sorting, setSorting] = useState<DataTableSorting | null>(getInitialSorting)
-  const [selectedRowIds, setSelectedRowIds] = useState<string[]>([])
+  const [sorting, setSorting] = useState<DataTableSorting>(getInitialSorting)
 
   useEffect(
-    () => updateTemplateUrl({ category, templateId: selectedId, query, purpose, sorting, status }),
-    [category, purpose, query, selectedId, sorting, status],
+    () => updateTemplateUrl({ category, detailTab, templateId: selectedId, query, purpose, sorting, status }),
+    [category, detailTab, purpose, query, selectedId, sorting, status],
   )
 
   const filterTemplate = useCallback(
@@ -288,7 +383,32 @@ function TemplatesPage() {
     [category, purpose, status],
   )
 
+  const matchingTemplates = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase("vi")
+    return templates.filter((template) => {
+      if (!filterTemplate(template)) return false
+      if (!normalizedQuery) return true
+      return `${template.name} ${template.description} ${template.purposeLabel} ${template.status}`
+        .toLocaleLowerCase("vi")
+        .includes(normalizedQuery)
+    })
+  }, [filterTemplate, query])
+
+  useEffect(() => {
+    if (matchingTemplates.length === 0) return
+    if (!matchingTemplates.some((template) => template.id === selectedId)) {
+      setSelectedId(matchingTemplates[0]!.id)
+    }
+  }, [matchingTemplates, selectedId])
+
   const selectedTemplate = templates.find((template) => template.id === selectedId) ?? templates[0]!
+
+  function retryDemoState() {
+    setDemoState("ready")
+    const url = new URL(window.location.href)
+    url.searchParams.delete("demo")
+    window.history.replaceState(null, "", url)
+  }
 
   return (
     <div className="grid min-h-screen bg-background xl:grid-cols-[minmax(0,1fr)_var(--spacing-detail-panel)]">
@@ -297,7 +417,14 @@ function TemplatesPage() {
           title="Templates"
           description="Quản lý các mẫu prompt để tạo nội dung nhanh và nhất quán cho kênh."
           action={
-            <Button type="button" variant="accent" size="lg">
+            <Button
+              type="button"
+              variant="accent"
+              size="lg"
+              disabled
+              title="Sẽ được triển khai trong M2"
+              className="disabled:opacity-100"
+            >
               <Plus aria-hidden="true" />
               Tạo template mới
             </Button>
@@ -318,70 +445,52 @@ function TemplatesPage() {
           id="templates-panel"
           role="tabpanel"
           aria-labelledby={`templates-panel-${category}-tab`}
-          aria-label={`Template — ${categoryTabs.find((item) => item.value === category)?.label ?? "Tất cả"}`}
           className="mt-4"
         >
           <DataTable
             caption="Danh sách template nội dung"
             columns={templateColumns}
-            data={templates}
+            data={demoState === "empty" ? [] : templates}
             getRowId={(template) => template.id}
             getRowLabel={(template) => template.name}
             activeRowId={selectedTemplate.id}
             globalFilter={query}
             filterFn={filterTemplate}
             sorting={sorting}
-            onSortingChange={setSorting}
             onRowClick={(template) => setSelectedId(template.id)}
-            pagination={{ pageSize: 5, pageSizeOptions: [5, 10] }}
-            rowSelection={{
-              selectedRowIds,
-              onSelectionChange: setSelectedRowIds,
-            }}
+            isLoading={demoState === "loading"}
+            error={demoState === "error"}
+            onRetry={retryDemoState}
             rowActions={(template) => (
               <Button
                 type="button"
                 variant="ghost"
                 size="icon-sm"
+                disabled
                 aria-label={`Mở thao tác cho ${template.name}`}
+                title="Thao tác template sẽ được triển khai trong M2"
+                className="disabled:opacity-100"
               >
                 <MoreVertical aria-hidden="true" />
               </Button>
             )}
-            toolbar={({ clearSelection, filteredRowCount, selectedRowCount }) => (
-              <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
-                <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-                  <SearchField
-                    label="Tìm template"
-                    name="template-search"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Tìm template…"
-                    className="min-w-52 flex-1"
-                  />
-                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground" aria-live="polite">
-                    {filteredRowCount} template
-                  </span>
-                  {selectedRowCount > 0 && (
-                    <span className="inline-flex h-control items-center gap-2 self-start rounded-md border border-accent/20 bg-accent-soft px-2.5 text-xs font-semibold text-accent-strong sm:self-auto">
-                      Đã chọn {selectedRowCount}
-                      <button
-                        type="button"
-                        onClick={clearSelection}
-                        className="rounded px-1 py-0.5 hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
-                      >
-                        Bỏ chọn
-                      </button>
-                    </span>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-2.5 sm:flex sm:shrink-0">
+            toolbar={
+              <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center xl:flex-col xl:items-stretch 2xl:flex-row 2xl:items-center">
+                <SearchField
+                  label="Tìm template"
+                  name="template-search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Tìm template…"
+                  className="min-w-52 flex-1"
+                />
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 lg:flex lg:shrink-0 xl:grid xl:grid-cols-3 2xl:flex">
                   <Select
                     label="Lọc theo mục đích"
                     name="purpose-filter"
                     value={purpose}
                     onChange={(event) => setPurpose(event.target.value)}
-                    className="sm:w-36"
+                    labelClassName="lg:w-36 xl:w-full 2xl:w-36"
                   >
                     <option value="all">Mục đích</option>
                     <option value="script">Script</option>
@@ -395,26 +504,46 @@ function TemplatesPage() {
                     name="status-filter"
                     value={status}
                     onChange={(event) => setStatus(event.target.value)}
-                    className="sm:w-40"
+                    labelClassName="lg:w-40 xl:w-full 2xl:w-40"
                   >
                     <option value="all">Trạng thái</option>
                     <option value="success">Đang dùng</option>
                     <option value="warning">Thử nghiệm</option>
                     <option value="neutral">Không hoạt động</option>
                   </Select>
+                  <Select
+                    label="Sắp xếp template"
+                    name="template-sort"
+                    value={optionFromSorting(sorting)}
+                    onChange={(event) => setSorting(sortingFromOption(event.target.value as SortOption))}
+                    labelClassName="lg:w-36 xl:w-full 2xl:w-36"
+                  >
+                    <option value="updated-desc">Mới cập nhật</option>
+                    <option value="updated-asc">Cũ nhất</option>
+                    <option value="name-asc">Tên A–Z</option>
+                    <option value="name-desc">Tên Z–A</option>
+                  </Select>
                 </div>
               </div>
-            )}
+            }
           />
         </section>
       </div>
 
-      <TemplateDetail template={selectedTemplate} />
+      <TemplateDetail template={selectedTemplate} tab={detailTab} onTabChange={setDetailTab} />
     </div>
   )
 }
 
-function TemplateDetail({ template }: { template: TemplateItem }) {
+function TemplateDetail({
+  template,
+  tab,
+  onTabChange,
+}: {
+  template: TemplateItem
+  tab: DetailTab
+  onTabChange: (tab: DetailTab) => void
+}) {
   return (
     <DetailPanel aria-label={`Chi tiết ${template.name}`}>
       <DetailPanelHeader>
@@ -435,117 +564,197 @@ function TemplateDetail({ template }: { template: TemplateItem }) {
             type="button"
             variant="ghost"
             size="icon-sm"
+            disabled
             aria-label={`Mở thao tác cho ${template.name}`}
+            title="Thao tác template sẽ được triển khai trong M2"
+            className="disabled:opacity-100"
           >
             <MoreVertical aria-hidden="true" />
           </Button>
         </div>
       </DetailPanelHeader>
 
-      <DetailDivider />
-      <DetailSection
-        title="Mô tả"
-        action={
-          <Button type="button" variant="outline" size="sm">
-            <PencilLine aria-hidden="true" />
-            Chỉnh sửa
-          </Button>
-        }
+      <div className="overflow-x-auto px-5">
+        <Tabs
+          items={detailTabs}
+          value={tab}
+          onValueChange={onTabChange}
+          ariaLabel="Nội dung chi tiết template"
+          panelId="template-detail-panel"
+          className="justify-between gap-0"
+        />
+      </div>
+
+      <div
+        id="template-detail-panel"
+        role="tabpanel"
+        aria-labelledby={`template-detail-panel-${tab}-tab`}
       >
+        {tab === "overview" && <TemplateOverview template={template} />}
+        {tab === "content" && <TemplateContent template={template} />}
+        {tab === "variables" && <TemplateVariables template={template} />}
+        {tab === "history" && <TemplateHistory template={template} />}
+      </div>
+    </DetailPanel>
+  )
+}
+
+function TemplateOverview({ template }: { template: TemplateItem }) {
+  return (
+    <>
+      <DetailSection title="Mô tả">
         <p className="text-xs leading-5 text-muted-foreground text-pretty">
-          Tạo kịch bản chi tiết cho video YouTube dạng dài (8–20 phút) với cấu trúc rõ ràng, mở đầu thu hút,
-          nội dung mạch lạc và kết thúc mạnh mẽ. Phù hợp với phong cách của{" "}
+          {template.description} Nội dung được giữ ngắn gọn, dễ rà soát và phù hợp với phong cách của{" "}
           <span translate="no">Ngộ Dậy Studio</span>.
         </p>
       </DetailSection>
 
       <DetailDivider />
-      <DetailSection
-        title="Biến sử dụng"
-        action={
-          <Button type="button" variant="outline" size="sm">
-            <Copy aria-hidden="true" />
-            Sao chép
-          </Button>
-        }
-      >
-        <div className="overflow-hidden rounded-md border border-border">
-          {[
-            ["{{topic}}", "Chủ đề chính của video"],
-            ["{{episode_title}}", "Tiêu đề tạm thời (nếu có)"],
-            ["{{notes}}", "Ghi chú bổ sung, yêu cầu riêng"],
-          ].map(([variable, description]) => (
-            <div
-              key={variable}
-              className="grid grid-cols-[132px_minmax(0,1fr)] gap-3 border-b border-border px-3 py-2 text-xs last:border-b-0"
-            >
-              <code translate="no" className="w-fit rounded bg-accent-soft px-1.5 py-0.5 font-mono text-accent-strong">
-                {variable}
-              </code>
-              <span className="break-words text-muted-foreground">{description}</span>
-            </div>
-          ))}
+      <DetailSection title="Thông tin">
+        <dl className="space-y-2.5">
+          <DetailInfoRow icon={Layers3} label="Mục đích">
+            <Badge variant={purposeTone[template.purpose]}>{template.purposeLabel}</Badge>
+          </DetailInfoRow>
+          <DetailInfoRow icon={CircleDot} label="Trạng thái">
+            <StatusBadge label={template.status} tone={template.statusTone} />
+          </DetailInfoRow>
+          <DetailInfoRow icon={Info} label="Phiên bản hiện tại">
+            <span className="font-medium tabular-nums text-foreground">{template.version}</span>
+          </DetailInfoRow>
+          <DetailInfoRow icon={CalendarClock} label="Cập nhật">
+            <time className="tabular-nums" dateTime={`${template.updatedAt}T14:30:00+07:00`}>
+              {formatDateTime(template.updatedAt)}
+            </time>
+          </DetailInfoRow>
+          <DetailInfoRow icon={UserRound} label="Người tạo">
+            Bạn
+          </DetailInfoRow>
+          <DetailInfoRow icon={ChartNoAxesColumnIncreasing} label="Lượt sử dụng">
+            <span className="tabular-nums">{numberFormatter.format(template.usageCount)} lần</span>
+          </DetailInfoRow>
+        </dl>
+      </DetailSection>
+
+      <DetailDivider />
+      <DetailSection title="Biến sử dụng">
+        <VariableList variables={variablesByPurpose[template.purpose]} />
+      </DetailSection>
+    </>
+  )
+}
+
+function TemplateContent({ template }: { template: TemplateItem }) {
+  const variables = variablesByPurpose[template.purpose]
+  return (
+    <DetailSection title="Nội dung prompt">
+      <pre className="max-h-[calc(100vh-13rem)] overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/45 p-3 font-sans text-xs leading-5 text-muted-foreground">
+        {`Bạn là một biên tập viên nội dung chuyên nghiệp.
+
+Hãy tạo ${template.purposeLabel.toLocaleLowerCase("vi")} cho chủ đề ${variables[0]?.name ?? "{{topic}}"}.
+
+Yêu cầu:
+- Nội dung rõ ràng, tự nhiên và dễ chỉnh sửa.
+- Giữ đúng mục tiêu của template “${template.name}”.
+- Sử dụng đầy đủ các biến được cung cấp.`}
+      </pre>
+    </DetailSection>
+  )
+}
+
+function TemplateVariables({ template }: { template: TemplateItem }) {
+  return (
+    <DetailSection title={`${variablesByPurpose[template.purpose].length} biến đang dùng`}>
+      <VariableList variables={variablesByPurpose[template.purpose]} />
+      <p className="mt-3 flex items-start gap-2 text-[11px] leading-4 text-muted-foreground">
+        <Info aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+        Đây là dữ liệu mock để duyệt cấu trúc browse; chỉnh sửa biến thuộc phạm vi M2.
+      </p>
+    </DetailSection>
+  )
+}
+
+function TemplateHistory({ template }: { template: TemplateItem }) {
+  return (
+    <DetailSection title="Lịch sử phiên bản">
+      <ol className="space-y-4">
+        <HistoryItem
+          active
+          version={template.version}
+          note="Cập nhật cấu trúc và tinh chỉnh nội dung prompt."
+          date={formatDateTime(template.updatedAt)}
+          dateTime={`${template.updatedAt}T14:30:00+07:00`}
+        />
+        <HistoryItem
+          version="v1.0"
+          note="Tạo phiên bản đầu tiên."
+          date={dateFormatter.format(toDate("2026-10-05"))}
+          dateTime="2026-10-05T09:20:00+07:00"
+        />
+      </ol>
+    </DetailSection>
+  )
+}
+
+function DetailInfoRow({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: LucideIcon
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <div className="grid grid-cols-[16px_132px_minmax(0,1fr)] items-center gap-2 text-xs text-muted-foreground">
+      <Icon aria-hidden="true" className="size-3.5 text-info" />
+      <dt>{label}</dt>
+      <dd className="min-w-0 break-words">{children}</dd>
+    </div>
+  )
+}
+
+function VariableList({ variables }: { variables: TemplateVariable[] }) {
+  return (
+    <div className="overflow-hidden rounded-md border border-border">
+      {variables.map((variable) => (
+        <div
+          key={variable.name}
+          className="grid grid-cols-[132px_minmax(0,1fr)] gap-3 border-b border-border px-3 py-2 text-xs last:border-b-0"
+        >
+          <code translate="no" className="w-fit rounded bg-accent-soft px-1.5 py-0.5 font-mono text-accent-strong">
+            {variable.name}
+          </code>
+          <span className="break-words text-muted-foreground">{variable.description}</span>
         </div>
-      </DetailSection>
+      ))}
+    </div>
+  )
+}
 
-      <DetailDivider />
-      <DetailSection
-        title="Xem trước prompt"
-        action={
-          <Button type="button" variant="outline" size="sm">
-            <Copy aria-hidden="true" />
-            Sao chép
-          </Button>
-        }
-      >
-        <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-muted/55 p-3 font-sans text-xs leading-5 text-muted-foreground">
-          {`Bạn là một biên tập viên YouTube chuyên nghiệp. Hãy tạo kịch bản chi tiết cho video với chủ đề: {{topic}}.
-
-Tiêu đề tạm thời: {{episode_title}}
-
-Yêu cầu: {{notes}}
-
-Kịch bản cần có: mở đầu thu hút, các phần nội dung chính, ví dụ minh họa, và phần kết thúc mạnh mẽ, kêu gọi hành động.`}
-        </pre>
-      </DetailSection>
-
-      <DetailDivider />
-      <DetailSection
-        title="Lịch sử phiên bản"
-        action={
-          <a
-            href="#templates"
-            className="inline-flex items-center gap-1 text-xs font-semibold text-info hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
-          >
-            Xem tất cả
-            <ArrowRight aria-hidden="true" className="size-3.5" />
-          </a>
-        }
-      >
-        <ol className="space-y-3">
-          <li className="grid grid-cols-[12px_38px_minmax(0,1fr)_auto] items-center gap-2 text-[11px]">
-            <span aria-hidden="true" className="size-2 rounded-full bg-success" />
-            <strong className="text-primary">v1.2</strong>
-            <span className="truncate text-muted-foreground">Cập nhật cấu trúc, bổ sung phần CTA.</span>
-            <time className="tabular-nums text-muted-foreground" dateTime="2026-10-22T14:30:00+07:00">
-              {dateTimeFormatter.format(new Date("2026-10-22T14:30:00+07:00"))}
-            </time>
-          </li>
-          <li className="grid grid-cols-[12px_38px_minmax(0,1fr)_auto] items-center gap-2 text-[11px]">
-            <span aria-hidden="true" className="size-2 rounded-full bg-border-strong" />
-            <strong className="text-primary">v1.1</strong>
-            <span className="truncate text-muted-foreground">Tinh chỉnh giọng văn, thêm ví dụ minh họa.</span>
-            <time className="tabular-nums text-muted-foreground" dateTime="2026-10-15T10:20:00+07:00">
-              {dateTimeFormatter.format(new Date("2026-10-15T10:20:00+07:00"))}
-            </time>
-          </li>
-        </ol>
-        <p className="mt-4 flex items-start gap-2 text-[11px] leading-4 text-muted-foreground">
-          <Info aria-hidden="true" className="mt-px size-3.5 shrink-0" />
-          Dữ liệu đang dùng để duyệt UI; chưa kết nối persistence.
-        </p>
-      </DetailSection>
-    </DetailPanel>
+function HistoryItem({
+  active = false,
+  version,
+  note,
+  date,
+  dateTime,
+}: {
+  active?: boolean
+  version: string
+  note: string
+  date: string
+  dateTime: string
+}) {
+  return (
+    <li className="grid grid-cols-[12px_38px_minmax(0,1fr)] items-start gap-2 text-[11px]">
+      <span aria-hidden="true" className={`mt-1 size-2 rounded-full ${active ? "bg-success" : "bg-border-strong"}`} />
+      <strong className="text-primary">{version}</strong>
+      <span className="min-w-0">
+        <span className="block text-muted-foreground text-pretty">{note}</span>
+        <time className="mt-1 block tabular-nums text-muted-foreground" dateTime={dateTime}>
+          {date} · Bạn
+        </time>
+      </span>
+    </li>
   )
 }
 
