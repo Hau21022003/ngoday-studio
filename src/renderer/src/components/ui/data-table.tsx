@@ -52,6 +52,7 @@ type DataTableColumn<TData> = {
 type DataTablePaginationConfig = {
   pageSize?: number
   pageSizeOptions?: readonly number[]
+  variant?: "compact" | "default"
 }
 
 type DataTableRowSelectionConfig<TData> = {
@@ -85,6 +86,7 @@ type DataTableLabels = {
 }
 
 type DataTableProps<TData> = {
+  actionsColumnWidth?: string
   activeRowId?: string
   caption: string
   className?: string
@@ -109,6 +111,7 @@ type DataTableProps<TData> = {
   sorting?: DataTableSorting | null
   tableClassName?: string
   toolbar?: ReactNode | ((context: DataTableToolbarContext<TData>) => ReactNode)
+  showActionsHeader?: boolean
 }
 
 const defaultLabels: DataTableLabels = {
@@ -192,6 +195,7 @@ function DataTableCheckbox({
 }
 
 function DataTable<TData>({
+  actionsColumnWidth,
   activeRowId,
   caption,
   className,
@@ -216,6 +220,7 @@ function DataTable<TData>({
   sorting,
   tableClassName,
   toolbar,
+  showActionsHeader = false,
 }: DataTableProps<TData>) {
   const labels = { ...defaultLabels, ...labelOverrides }
   const [internalSorting, setInternalSorting] = useState<DataTableSorting | null>(defaultSorting)
@@ -338,6 +343,7 @@ function DataTable<TData>({
     ? Math.min((pageIndex + 1) * pageSize, sortedRows.length)
     : sortedRows.length
   const hasFullWidthState = error || (!isLoading && visibleRows.length === 0)
+  const compactPagination = paginationEnabled && pagination.variant === "compact"
 
   return (
     <div className={cn("space-y-3", className)}>
@@ -363,7 +369,12 @@ function DataTable<TData>({
               {columns.map((column) => (
                 <col key={column.id} style={column.width ? { width: column.width } : undefined} />
               ))}
-              {rowActions && <col className="w-12" />}
+              {rowActions && (
+                <col
+                  className={actionsColumnWidth ? undefined : "w-12"}
+                  style={actionsColumnWidth ? { width: actionsColumnWidth } : undefined}
+                />
+              )}
             </colgroup>
             <TableHeader>
               <tr>
@@ -434,7 +445,7 @@ function DataTable<TData>({
                 })}
                 {rowActions && (
                   <TableHead className="px-2 text-right">
-                    <span className="sr-only">{labels.actions}</span>
+                    <span className={showActionsHeader ? undefined : "sr-only"}>{labels.actions}</span>
                   </TableHead>
                 )}
               </tr>
@@ -524,24 +535,23 @@ function DataTable<TData>({
               {labels.showingRows(pageStart, pageEnd, sortedRows.length)}
             </span>
             <div className="ml-auto flex items-center gap-2">
-              <label className="flex items-center gap-2">
-                <span className="sr-only">{labels.rowsPerPage}</span>
-                <select
-                  aria-label={labels.rowsPerPage}
-                  value={pageSize}
-                  onChange={(event) => setPageSize(Number(event.target.value))}
-                  className="h-8 rounded-md border border-input bg-surface px-2 text-xs text-foreground focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-ring/15"
-                >
-                  {(pagination.pageSizeOptions ?? [10, 25, 50]).map((option) => (
-                    <option key={option} value={option}>
-                      {option} / {labels.page}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <span className="min-w-14 text-center font-medium tabular-nums text-foreground">
-                {pageIndex + 1} / {pageCount}
-              </span>
+              {!compactPagination && (
+                <label className="flex items-center gap-2">
+                  <span className="sr-only">{labels.rowsPerPage}</span>
+                  <select
+                    aria-label={labels.rowsPerPage}
+                    value={pageSize}
+                    onChange={(event) => setPageSize(Number(event.target.value))}
+                    className="h-8 rounded-md border border-input bg-surface px-2 text-xs text-foreground focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-ring/15"
+                  >
+                    {(pagination.pageSizeOptions ?? [10, 25, 50]).map((option) => (
+                      <option key={option} value={option}>
+                        {option} / {labels.page}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -552,6 +562,18 @@ function DataTable<TData>({
               >
                 <ChevronLeft aria-hidden="true" />
               </Button>
+              {compactPagination ? (
+                <span
+                  aria-current="page"
+                  className="grid size-8 place-items-center rounded-md border border-accent bg-surface font-semibold tabular-nums text-accent-strong"
+                >
+                  {pageIndex + 1}
+                </span>
+              ) : (
+                <span className="min-w-14 text-center font-medium tabular-nums text-foreground">
+                  {pageIndex + 1} / {pageCount}
+                </span>
+              )}
               <Button
                 type="button"
                 variant="outline"

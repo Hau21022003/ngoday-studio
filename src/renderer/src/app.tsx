@@ -1,6 +1,7 @@
 import { Menu } from "lucide-react"
 import { useEffect, useState } from "react"
 
+import { EpisodesPage } from "@/components/episodes-page"
 import { StudioSidebar, type StudioRoute } from "@/components/studio-sidebar"
 import { TemplatesPage } from "@/components/templates-page"
 import { Button } from "@/components/ui/button"
@@ -71,7 +72,9 @@ function App() {
       </Sheet>
 
       <main id="main-content" className="min-h-screen scroll-mt-4 lg:pl-sidebar">
-        {activeRoute === "templates" ? (
+        {activeRoute === "episodes" ? (
+          <EpisodesPage />
+        ) : activeRoute === "templates" ? (
           <TemplatesPage />
         ) : (
           <WorkspacePlaceholder route={activeRoute} />

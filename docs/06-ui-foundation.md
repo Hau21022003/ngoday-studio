@@ -31,6 +31,15 @@ M2 tiếp tục dùng query parameter chỉ dành cho review, không hiển th�
 
 Luồng authoring hai bước được phản ánh bằng `authorStep=1|2`: `1` là chỉnh sửa nội dung, `2` là xem trước và hoàn thành. Preview values chỉ tồn tại trong phiên editor và không đưa lên URL; authoring không còn dùng preview/history rail bên phải.
 
+## M3 Episodes List review routes
+
+Phần đầu M3 chỉ gồm danh sách episode full-width, dùng dữ liệu in-memory và chưa nối sang create/edit/archive hoặc Episode workspace:
+
+- Ready: `/#episodes`
+- Empty: `/?demo=empty#episodes`
+- Loading: `/?demo=loading#episodes`
+- Error + retry: `/?demo=error#episodes`
+
 ## Tokens
 
 Token được khai báo tại `src/renderer/src/styles/globals.css`, sau đó ánh xạ vào Tailwind CSS v4 bằng `@theme inline`.
