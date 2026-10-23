@@ -41,7 +41,7 @@ Tạo một workflow local đáng tin cậy cho Episode, prompt, script, scene v
 - Implementation mới của Phase 1 bắt đầu từ baseline đã chốt trong repository này.
 - Mọi implementation Phase 1 cũ hoặc thử nghiệm không phải baseline và không bắt buộc reuse. Chỉ tham khảo hoặc tái sử dụng phần phù hợp sau khi được đánh giá chủ động theo milestone đang thực hiện.
 - **M1 — Approved/Completed ngày 2026-10-23.** Visual direction, density, responsive behavior và browse/detail structure của Templates đã được người dùng duyệt và trở thành baseline cho các milestone sau.
-- **M2 — Implementation complete, awaiting review ngày 2026-10-23.** UX contract đã duyệt; prototype mock/in-memory đã bao phủ create/edit, variable validation, rendered preview/copy, immutable version history, unsaved confirm và error recovery. M2 chưa được đánh dấu approved/completed cho đến khi người dùng review.
+- **M2 — Implementation rebuilt theo flow hai bước, awaiting review ngày 2026-10-23.** Prototype mock/in-memory đã bao phủ create/edit, variable validation, review metadata + sample values, rendered preview/copy, immutable version history, unsaved confirm và error recovery. M2 chưa được đánh dấu approved/completed cho đến khi người dùng review.
 - M3–M8 ở trạng thái planned; không bắt đầu M3 trước khi M2 được implement và duyệt tại điểm dừng review.
 - Không có milestone database/persistence nào được phép bắt đầu trước khi M4 qua điểm dừng review.
 

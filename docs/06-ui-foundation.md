@@ -29,7 +29,7 @@ M2 tiếp tục dùng query parameter chỉ dành cho review, không hiển th�
 - Authoring load error + retry: `/?author=create&authorState=error#templates`
 - Mock save error giữ nguyên draft + retry: `/?author=edit&template=youtube-long-form&authorState=save-error#templates`
 
-Stepper và rail được phản ánh bằng `authorStep=1|2|3` và `authorRail=history`. Preview values chỉ tồn tại trong phiên editor và không đưa lên URL.
+Luồng authoring hai bước được phản ánh bằng `authorStep=1|2`: `1` là chỉnh sửa nội dung, `2` là xem trước và hoàn thành. Preview values chỉ tồn tại trong phiên editor và không đưa lên URL; authoring không còn dùng preview/history rail bên phải.
 
 ## Tokens
 
