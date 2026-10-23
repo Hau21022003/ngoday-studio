@@ -12,30 +12,205 @@
 
 ### Mục tiêu
 
-Tạo nguồn dữ liệu local đáng tin cậy cho Episode, prompt, script, scene và asset slot; chưa điều khiển Flow.
+Tạo một workflow local đáng tin cậy cho Episode, prompt, script, scene và asset slot; chưa điều khiển Flow. Phase 1 được chia thành **8 milestone tuần tự** để chốt UI/workflow trước, sau đó mới thiết kế và nối persistence.
 
-### Phạm vi
+### Nguyên tắc chia milestone
 
-1. Khởi tạo Electron + React + TypeScript với main/preload/renderer an toàn.
-2. SQLite migrations và repository cho Episode, template/version, script/revision, scene, character reference metadata và asset slot.
-3. Episode CRUD, archive và tìm kiếm cơ bản.
-4. Prompt Template Editor:
-   - Tạo phiên bản template bất biến.
-   - Validate biến cho phép.
-   - Preview/render theo Episode.
-   - Copy prompt đã render.
-5. Script Editor:
-   - Tạo thủ công.
-   - Paste/import Markdown và JSON theo schema đã công bố.
-   - Tách/reorder scene.
-   - Autosave và revision history tối thiểu.
-   - Duyệt từng scene.
-6. Asset planning:
-   - Tạo asset slot cho từng scene.
-   - Media type, prompt, references và canonical name.
-   - Kiểm tra duplicate/missing data.
-7. Export/import backup metadata và script; chưa gồm browser profile.
-8. Unit tests cho template rendering, ordering, naming, validation và persistence.
+- Mỗi milestone phải tạo ra một lát cắt có thể chạy, demo và review độc lập.
+- Dùng dữ liệu mock xuyên suốt M1–M4. Không thêm SQLite, repository, persistence nghiệp vụ hoặc IPC dữ liệu trước khi toàn bộ UI/workflow liên quan được duyệt.
+- `Templates` là design source of truth. Episodes, Script Editor, Scenes và Assets chỉ được compose token/component đã chốt; không tạo visual language riêng.
+- Mỗi milestone có một điểm dừng bắt buộc. Chỉ bắt đầu milestone kế tiếp sau khi người dùng duyệt hoặc yêu cầu điều chỉnh rõ ràng.
+- Feedback làm thay đổi milestone đã duyệt phải được cập nhật lại vào acceptance criteria và tài liệu trước khi triển khai tiếp.
+- Mỗi milestone implementation phải build thành công, không có lỗi console trong luồng demo và không làm hỏng milestone đã duyệt trước đó.
+
+### Thứ tự và phụ thuộc
+
+| Milestone | Kết quả review chính | Loại dữ liệu | Phụ thuộc |
+| --- | --- | --- | --- |
+| M1 — UI Foundation + Templates Browse | Visual system, app shell và mật độ trang Templates | Mock | Không |
+| M2 — Template Authoring Prototype | Luồng tạo/sửa/preview/version template | Mock/in-memory | M1 được duyệt |
+| M3 — Episodes Prototype | Information architecture và luồng quản lý Episode | Mock/in-memory | M1–M2 được duyệt |
+| M4 — Script, Scenes & Assets Prototype | Workflow Phase 1 hoàn chỉnh ở mức UI | Mock/in-memory | M1–M3 được duyệt |
+| M5 — Domain Contract & Persistence Foundation | Data model, migration, repository và IPC contract | SQLite/test fixtures | M1–M4 được duyệt |
+| M6 — Templates & Episodes Vertical Slice | Template và Episode hoạt động bền vững sau restart | Persisted | M5 được duyệt |
+| M7 — Script & Scene Vertical Slice | Import, autosave, revision, reorder và approval | Persisted | M6 được duyệt |
+| M8 — Asset Planning & Phase 1 Hardening | Asset slot, backup/restore và kiểm thử end-to-end | Persisted | M7 được duyệt |
+
+### Trạng thái hiện tại
+
+- Implementation mới của Phase 1 bắt đầu từ trạng thái hiện tại trên branch `master`.
+- Mọi implementation Phase 1 cũ hoặc thử nghiệm không phải baseline và không bắt buộc reuse. Chỉ tham khảo hoặc tái sử dụng phần phù hợp sau khi được đánh giá chủ động theo milestone đang thực hiện.
+- M1–M8 ở trạng thái planned, chưa triển khai theo baseline mới.
+- Không có milestone database/persistence nào được phép bắt đầu trước khi M4 qua điểm dừng review.
+
+### M1 — UI Foundation + Templates Browse
+
+**Phạm vi**
+
+- Chuẩn hóa token màu, typography, spacing, radius, border và shadow theo `06-ui-foundation.md`.
+- Chuẩn hóa primitive dùng chung: button, input/select/search, badge/status, table/list row, tabs, sidebar/nav item, detail panel và empty/loading/error state.
+- Hoàn thiện app shell desktop-first, sidebar cố định và navigation responsive cơ bản.
+- Dựng trang Templates bằng mock data: tabs, search/filter/sort, selected row và detail panel.
+- Chưa triển khai tạo/sửa template thật, database, persistence hoặc IPC nghiệp vụ.
+
+**Acceptance criteria**
+
+- Trang Templates bám đúng hướng Light Creative Studio / Production Workspace và là nguồn tham chiếu trực quan cho page sau.
+- Màu, khoảng cách, control và trạng thái tương tác đến từ token/component dùng chung; không có style riêng không cần thiết trong page.
+- Desktop layout có density rõ ràng; viewport hẹp chuyển navigation/detail/toolbar đúng quy ước mà không gây horizontal overflow ngoài vùng table chủ đích.
+- Keyboard focus, tab interaction, label/aria cho icon action và reduced motion hoạt động ở mức foundation.
+- Có thể demo selected, empty, loading và error state bằng dữ liệu mock; build và smoke test không có lỗi console.
+
+**Điểm dừng review**
+
+Người dùng duyệt visual direction, density, token, component, app shell, responsive behavior và cấu trúc browse/detail của Templates. Không bắt đầu Template Editor trước khi M1 được duyệt.
+
+### M2 — Template Authoring Prototype
+
+**Phạm vi**
+
+- Dùng mock/in-memory state để mô phỏng tạo template, chỉnh sửa metadata/nội dung, khai báo biến, preview và copy prompt đã render.
+- Mô phỏng version history bất biến, validation state, unsaved changes, confirm/cancel và success/error feedback.
+- Giữ nguyên foundation M1; chỉ thêm shared component khi có use case tái sử dụng rõ ràng.
+- Chưa lưu dữ liệu qua restart và chưa thiết kế schema SQLite.
+
+**Acceptance criteria**
+
+- Một reviewer có thể đi hết happy path: mở template → chỉnh nội dung/biến → preview → copy → tạo version mới.
+- UI thể hiện rõ biến hợp lệ, biến thiếu, biến không hỗ trợ và nội dung chưa lưu.
+- Version cũ và version đang chỉnh sửa được phân biệt rõ trong UI; thao tác phá hủy có bước xác nhận phù hợp.
+- Các trạng thái form, validation và feedback dùng chung visual system đã duyệt ở M1.
+
+**Điểm dừng review**
+
+Người dùng chốt field, terminology, variable syntax, versioning mental model và thứ tự thao tác của Template Editor. Không bắt đầu Episodes prototype trước khi M2 được duyệt.
+
+### M3 — Episodes Prototype
+
+**Phạm vi**
+
+- Dựng Episode list với mock data: search, status filter, sort, selected row và trạng thái rỗng/lỗi/loading.
+- Dựng luồng tạo, sửa metadata, mở workspace và archive Episode bằng in-memory state.
+- Xác định navigation từ Episodes sang Script/Scenes/Assets mà chưa triển khai nghiệp vụ phía sau.
+- Chưa persistence, chưa autosave và chưa import script.
+
+**Acceptance criteria**
+
+- Luồng tạo → tìm → mở → sửa → archive Episode có thể demo hoàn chỉnh trong một phiên chạy.
+- Trạng thái và primary action rõ ràng, không biến page thành generic dashboard hoặc lạm dụng card.
+- Episode pages tái sử dụng app shell, page header, toolbar, table/list, badge, dialog/form và state feedback từ foundation.
+- Navigation cho biết rõ context Episode hiện tại và đường quay lại danh sách.
+
+**Điểm dừng review**
+
+Người dùng chốt Episode fields, status, archive behavior, navigation hierarchy và mức thông tin cần hiển thị. Không bắt đầu editor prototype trước khi M3 được duyệt.
+
+### M4 — Script, Scenes & Assets Prototype
+
+**Phạm vi**
+
+- Dùng một fixture Episode cố định để dựng Script Editor, scene list/detail và asset planning bằng mock/in-memory state.
+- Mô phỏng tạo/paste/import script, tách và reorder scene, autosave indicator, revision history và scene approval.
+- Mô phỏng asset slot theo scene: media type, prompt, reference, canonical-name preview và duplicate/missing state.
+- Bao phủ confirm flow khi reorder có nguy cơ ảnh hưởng naming/mapping; chưa ghi database hoặc filesystem.
+
+**Acceptance criteria**
+
+- Reviewer có thể đi hết prototype: Episode → Script → Scenes → approval → asset slots mà không gặp dead end.
+- Editor có hierarchy rõ, density phù hợp và dùng section/separator thay cho nested card quá mức.
+- Import success/failure, unsaved/saving/saved, invalid scene, reorder warning và duplicate asset state đều có UI rõ ràng.
+- Naming preview và quan hệ Episode → Script → Scene → Asset slot đủ rõ để thảo luận data model.
+- Mọi page kế thừa foundation; thay đổi shared visual rule được phản ánh lại trang Templates.
+
+**Điểm dừng review**
+
+Người dùng duyệt toàn bộ Phase 1 workflow, naming convention, script import format, scene approval và asset-slot model. Đây là cổng bắt buộc trước mọi công việc database/persistence.
+
+### M5 — Domain Contract & Persistence Foundation
+
+**Điều kiện bắt đầu:** M1–M4 đã được duyệt và các câu hỏi nghiệp vụ ảnh hưởng schema đã có quyết định ghi trong `05-decisions.md`.
+
+**Phạm vi**
+
+- Chốt domain types và validation schema cho Episode, template/version, script/revision, scene, character reference metadata và asset slot.
+- Thiết kế SQLite migrations, repository boundary, transaction rules và typed IPC qua preload.
+- Tạo test fixtures tương ứng với mock đã được duyệt; không tự ý thêm field chỉ vì thuận tiện cho database.
+- Spike sớm native SQLite packaging trên Windows; ưu tiên migration failure handling, transaction safety và backup trước migration quan trọng.
+- Không xây cơ chế rollback migration phức tạp khi chưa có use case; ưu tiên migration tuần tự, transaction nguyên tử và hướng phục hồi tiến về phía trước.
+
+**Acceptance criteria**
+
+- Data model truy vết được về field và workflow đã duyệt ở M1–M4.
+- Migration chạy được trên database trống và database ở version trước, có version rõ ràng.
+- Migration lỗi hoặc bị gián đoạn không để lại schema/data nửa chừng, trả lỗi có thể chẩn đoán và giữ được đường phục hồi an toàn bằng transaction/backup; không yêu cầu rollback framework tổng quát.
+- Renderer không truy cập Node/SQLite trực tiếp; IPC validation chặn payload sai.
+- Repository contract có test cho transaction, constraint chính và lỗi dự kiến.
+- Dev build/package spike xác nhận SQLite tương thích Electron trên Windows.
+
+**Điểm dừng review**
+
+Người dùng duyệt ER/data model, migration strategy, IPC surface và backup boundary. Chưa nối page sản phẩm với database trước khi M5 được duyệt.
+
+### M6 — Templates & Episodes Vertical Slice
+
+**Phạm vi**
+
+- Nối UI đã duyệt với repository/IPC cho Template CRUD, immutable version, validation, preview/render và copy.
+- Nối Episode create/edit/archive/search/open với persistence thật.
+- Thay mock data bằng persisted data nhưng giữ nguyên contract và visual behavior đã duyệt.
+
+**Acceptance criteria**
+
+- Template và Episode tạo/sửa/archive còn nguyên sau khi restart app.
+- Tạo version mới không thay đổi snapshot cũ; biến thiếu/không hỗ trợ bị báo trước khi render.
+- Search/filter và selected detail phản ánh đúng dữ liệu đã lưu.
+- Lỗi IPC/database được chuyển thành error state có hướng xử lý, không làm mất input chưa lưu.
+- Unit/integration test bao phủ validation, rendering, repository và restart smoke path.
+
+**Điểm dừng review**
+
+Người dùng kiểm tra một vertical slice bằng dữ liệu thật và duyệt hành vi persistence/error recovery. Không nối Script Editor trước khi M6 được duyệt.
+
+### M7 — Script & Scene Vertical Slice
+
+**Phạm vi**
+
+- Persist script creation, paste/import Markdown và JSON theo schema đã duyệt.
+- Thực hiện autosave, revision history, scene split/reorder và approval validation.
+- Đảm bảo import và reorder dùng transaction; hiển thị preview/confirm khi canonical naming bị ảnh hưởng.
+
+**Acceptance criteria**
+
+- Import hợp lệ tạo đúng scene theo thứ tự; import lỗi không ghi dữ liệu nửa chừng.
+- Autosave không mất nội dung qua close/reopen trong test scenario và thể hiện đúng saving/error state.
+- Revision cũ bất biến; restore/open revision không âm thầm ghi đè bản hiện tại.
+- Reorder cập nhật order/naming preview nhất quán và yêu cầu xác nhận khi có ảnh hưởng mapping.
+- Scene chỉ chuyển `approved` khi các trường bắt buộc hợp lệ.
+
+**Điểm dừng review**
+
+Người dùng duyệt editor bằng một script mẫu thực tế đã ẩn dữ liệu nhạy cảm, bao gồm import, autosave, revision, reorder và approval. Không triển khai asset persistence/hardening trước khi M7 được duyệt.
+
+### M8 — Asset Planning & Phase 1 Hardening
+
+**Phạm vi**
+
+- Persist asset slot, media type, prompt, character reference metadata và canonical name.
+- Thêm validation duplicate/missing data và constraint canonical name duy nhất trong Episode.
+- Hoàn thiện export/import backup metadata và script; chưa gồm browser profile hay binary media.
+- Chạy regression, backup/restore và end-to-end test cho toàn bộ Phase 1; cập nhật tài liệu/sample fixtures.
+
+**Acceptance criteria**
+
+- Asset slot còn nguyên sau restart; canonical name duy nhất và validation thống nhất giữa UI/domain/database.
+- Backup rồi restore vào database trống tái tạo được Episode/template/script/scene/asset slot mà không gồm credential.
+- Luồng end-to-end từ tạo Episode đến scene/asset slot đã duyệt chạy được không cần network.
+- Test report bao phủ template rendering, validation, import transaction, revision, ordering, naming và persistence.
+- Không có regression so với visual/workflow đã duyệt ở M1–M4.
+
+**Điểm dừng review**
+
+Người dùng chạy pilot một Episode, duyệt kết quả restore và test report. Chỉ khi M8 được duyệt mới xem Phase 1 hoàn tất và chuyển sang Phase 2.
 
 ### Ngoài phạm vi Phase 1
 
@@ -52,7 +227,7 @@ Tạo nguồn dữ liệu local đáng tin cậy cho Episode, prompt, script, sc
 - Định dạng import/export kịch bản được ghi rõ và có sample fixture trong giai đoạn implementation.
 - Test report cho logic cốt lõi.
 
-### Acceptance criteria
+### Acceptance criteria tổng thể
 
 - Tạo, sửa, archive và mở lại Episode sau khi restart mà không mất dữ liệu.
 - Template thay đúng biến; biến thiếu/không hỗ trợ bị báo trước khi render.
@@ -67,7 +242,7 @@ Tạo nguồn dữ liệu local đáng tin cậy cho Episode, prompt, script, sc
 
 ### Exit gate
 
-Người dùng duyệt data model, naming convention, script import format và UI flow. Sau đó mới thực hiện Flow PoC.
+Tất cả điểm dừng M1–M8 đã được người dùng duyệt; data model, naming convention, script import format, UI flow và backup/restore có bằng chứng kiểm thử. Sau đó mới thực hiện Phase 2.
 
 ## 3. Phase 2 — Google Flow Automation bằng Playwright
 
