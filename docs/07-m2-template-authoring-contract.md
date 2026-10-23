@@ -3,6 +3,7 @@
 - **Status:** Approved ngày 2026-10-23
 - **Implementation:** Rebuilt theo flow hai bước, awaiting milestone review ngày 2026-10-23
 - **Visual source of truth:** M1 Templates và `06-ui-foundation.md`
+- **Amendment 2026-10-24:** purpose `script` được thay bằng `scene` theo workflow `Episode → Scenes → Assets`; lượt này chỉ cập nhật contract, chưa sửa UI hiện hành.
 
 ## 1. Mục tiêu và ranh giới
 
@@ -17,7 +18,7 @@ Không thuộc M2: xóa template, import/export, gọi LLM, phân quyền, thumb
 | Field | Quy tắc |
 | --- | --- |
 | `name` | Bắt buộc, trim, 3–80 ký tự và không trùng tên khác khi so sánh không phân biệt hoa/thường. |
-| `purpose` | Bắt buộc: `script`, `thumbnail`, `hook`, `description`, `idea`, `other`. |
+| `purpose` | Bắt buộc: `scene`, `thumbnail`, `hook`, `description`, `idea`, `other`. `scene` dùng cho prompt tạo JSON Scenes, không đại diện một Script module. |
 | `description` | Bắt buộc, trim, 10–240 ký tự; dùng tại list/detail M1. |
 | `status` | `experimental` (Thử nghiệm), `active` (Đang dùng), `inactive` (Không hoạt động); template mới mặc định `experimental`. |
 

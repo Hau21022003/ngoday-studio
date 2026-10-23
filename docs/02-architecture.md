@@ -2,7 +2,7 @@
 
 ## 1. Mục tiêu kiến trúc
 
-- Local-first, hoạt động được với dữ liệu Episode/kịch bản/media khi không có mạng; chỉ phần Flow cần Internet.
+- Local-first, hoạt động được với dữ liệu Episode/Scene/media khi không có mạng; chỉ phần Flow cần Internet.
 - Một desktop app, một database, không backend riêng và không microservice.
 - Tách UI, quyền truy cập hệ thống và automation đủ rõ để giảm rủi ro bảo mật.
 - Queue có thể phục hồi sau crash/restart và không tạo generation trùng ngoài ý muốn.
@@ -26,7 +26,7 @@ flowchart LR
 
 ### Renderer
 
-- React + TypeScript cho Episode list, template editor, script/scene editor, queue, review và media library.
+- React + TypeScript cho Episode list/workspace, template editor, Scenes editor, Assets, queue, review và media library.
 - Không truy cập trực tiếp Node.js, filesystem, SQLite hoặc Playwright.
 - Không giữ trạng thái queue làm nguồn dữ liệu chính; renderer đọc snapshot và nhận event từ main process.
 
@@ -39,7 +39,7 @@ flowchart LR
 ### Electron main / application services
 
 - Sở hữu database, migration, filesystem, dialog chọn folder và lifecycle của browser automation.
-- Chứa use case nghiệp vụ: Episode, Script, Scene, Queue, Review, Media, Export.
+- Chứa use case nghiệp vụ: Episode, Template, Scene, Asset, Queue, Review, Media, Export.
 - Chạy job runner bất đồng bộ trong main ở bản đầu. Chỉ tách worker process nếu PoC chứng minh Playwright làm main process mất ổn định.
 
 ### Flow adapter
@@ -58,7 +58,7 @@ flowchart LR
 | --- | --- | --- |
 | Electron `userData` | `app.db`, settings, migration state, log đã lọc | Có |
 | Profile automation riêng | Cookie/session/cache của Chrome/Chromium | Không đưa vào backup thông thường |
-| Workspace do người dùng chọn | Media gốc, thumbnail local, export, manifest, script export | Có |
+| Workspace do người dùng chọn | Media gốc, thumbnail local, export, manifest, Scenes/narration export | Có |
 | Temp/staging | Download chưa xác minh và artifact tạm | Có thể dọn an toàn khi không còn job |
 
 Đề xuất mặc định trên Windows:
@@ -103,13 +103,14 @@ Tên trường dưới đây là logical schema; kiểu và migration cụ thể
 
 - `prompt_templates`: identity, name, purpose, current version.
 - `prompt_template_versions`: immutable content, biến cho phép, schema/version, thời điểm tạo.
-- Scene/script lưu `template_version_id` và rendered snapshot để thay template sau này không làm thay đổi lịch sử.
+- Scene được import có thể lưu `source_template_version_id` để biết Scene Template nào đã tạo payload. Phase 1 không lưu một Script object hoặc rendered-script snapshot riêng.
 
-### `scripts` và `script_revisions`
+### Scene creation flow — không có `scripts`
 
-- Một Episode có một script hiện hành và nhiều revision bất biến.
-- Revision giữ raw Markdown/JSON import, nguồn (`manual`, `import`, `llm`) và validation result.
-- Không cần collaborative editing hoặc CRDT.
+- `Script` không phải domain object, module UI, repository hay bảng SQLite trong Phase 1.
+- Flow tạo Scenes nhận metadata Episode, Scene Template version và `Nội dung nguồn` tùy chọn để render prompt cho người dùng copy sang ChatGPT.
+- `Nội dung nguồn`, rendered prompt và raw JSON đang preview là state tạm của flow; không có revision/persistence riêng. Sau khi import thành công, danh sách Scene có cấu trúc là nguồn dữ liệu chính.
+- Import JSON dùng validation trước transaction; payload sai không tạo Scene nửa chừng.
 
 ### `scenes`
 
@@ -121,8 +122,10 @@ Tên trường dưới đây là logical schema; kiểu và migration cụ thể
 | `image_prompt`, `video_prompt` | Prompt làm việc hiện hành |
 | `status` | Draft/review/approved/needs changes |
 | `revision_no` | Optimistic concurrency đơn giản |
+| `source_template_version_id` | Scene Template đã dùng khi import; nullable với Scene tạo thủ công |
+| `created_at`, `updated_at` | UTC timestamp |
 
-Nếu cần lịch sử chi tiết từng scene, dùng `scene_revisions` chứa snapshot; không ghi đè revision đã được dùng để generate.
+Phase 1 không có `scene_revisions`. Scene được cập nhật trực tiếp; khi một prompt được dùng để generate media ở Phase 2, `generation_attempts.prompt_snapshot` giữ bằng chứng bất biến của lần tạo đó.
 
 ### `character_references`
 
@@ -238,7 +241,7 @@ Không khóa số version trong tài liệu kế hoạch. Khi bắt đầu imple
 - Redux, RxJS, message broker, server database, Docker, Kubernetes.
 - ORM nặng. SQL migration nhỏ và repository rõ ràng là đủ; có thể cân nhắc Drizzle nếu số query tăng đáng kể.
 - FFmpeg trong Phase 1/2. Phase 3 chỉ thêm nếu cần đọc duration/thumbnail mà API hệ điều hành không đủ.
-- SDK LLM trong Phase 1 mặc định; script có thể paste/import trước.
+- SDK LLM trong Phase 1; bản tối thiểu render/copy Scene Template và paste/import JSON Scenes thủ công.
 
 ## 7. Bảo mật
 

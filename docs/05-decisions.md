@@ -33,16 +33,16 @@
 **Decision:** SQLite không chứa blob media. File nằm trong workspace do người dùng chọn; DB lưu relative path, hash và metadata.  
 **Reason:** database nhỏ, backup/export media rõ ràng và dễ dùng với CapCut.
 
-### D-005 — Cách tạo kịch bản ở Phase 1
+### D-005 — Cách tạo Scenes ở Phase 1
 
-**Status:** Proposed.  
-**Decision:** bản tối thiểu render/copy prompt và cho paste/import kết quả từ ChatGPT; không tự động hóa ChatGPT web. Tích hợp LLM API là tùy chọn sau khi chốt provider/chi phí/secret storage.  
-**Reason:** hoàn thành editor local mà không thêm auth, API cost và dependency chưa cần thiết.
+**Status:** Accepted theo yêu cầu ngày 2026-10-24.
+**Decision:** từ Episode, người dùng chọn Scene Template, render/copy prompt sang ChatGPT thủ công rồi paste hoặc import JSON Scenes. Không tự động hóa ChatGPT web. Tích hợp LLM API là tùy chọn sau khi chốt provider/chi phí/secret storage.
+**Reason:** tạo được Scenes có cấu trúc mà không thêm auth, API cost và dependency chưa cần thiết.
 
 ### D-006 — Version bất biến
 
 **Status:** Proposed.  
-**Decision:** template version, script revision và generation attempt đã sử dụng không bị update đè; thay đổi tạo snapshot/revision mới.  
+**Decision:** template version và generation attempt đã sử dụng không bị update đè; thay đổi tạo snapshot/version mới. Phase 1 không có script revision. Scene hiện hành được cập nhật trực tiếp; generation attempt ở Phase 2 giữ prompt snapshot đã thực sự sử dụng.
 **Reason:** luôn truy được prompt nào sinh ra media nào.
 
 ### D-007 — Asset slot và tên canonical
@@ -119,6 +119,24 @@
 **Decision:** ba Phase đầu hỗ trợ Windows vì path đích, Flow desktop và CapCut workflow hiện tại đều ở Windows. Kiến trúc tránh khóa path không cần thiết nhưng chưa cam kết macOS/Linux.  
 **Reason:** giảm ma trận test/packaging.
 
+### D-019 — Không có Script module/domain object
+
+**Status:** Accepted theo yêu cầu ngày 2026-10-24.
+**Decision:** Phase 1 không có tab/module `Script`, bảng `scripts`, `script_revisions`, repository/IPC Script hoặc bước Script → Scenes. Workflow chuẩn là `Episode → Scenes → Assets`.
+**Consequence:** mọi roadmap, UI contract, data model, backup và acceptance criteria phải tham chiếu trực tiếp Episode/Scene; implementation hiện hành còn tab Script sẽ được chỉnh ở lượt UI sau.
+
+### D-020 — Narration thuộc Scene
+
+**Status:** Accepted theo yêu cầu ngày 2026-10-24.
+**Decision:** narration/voice-over là field trực tiếp của từng Scene và được review/approve cùng Scene. Không có narration document toàn Episode làm nguồn dữ liệu chính.
+**Consequence:** export narration toàn Episode chỉ là file dẫn xuất từ các Scene theo thứ tự, không phải object có lifecycle riêng.
+
+### D-021 — `Nội dung nguồn` là input tùy chọn, tạm thời
+
+**Status:** Accepted theo yêu cầu ngày 2026-10-24.
+**Decision:** flow `Tạo Scenes` có trường `Nội dung nguồn` tùy chọn để dán outline/kịch bản có sẵn vào Scene Template. Giá trị này chỉ phục vụ render/copy prompt trong phiên; Phase 1 không persistence, revision hoặc backup riêng cho nó.
+**Consequence:** sau import thành công, JSON Scenes đã validate và các Scene được tạo mới là nguồn dữ liệu chính.
+
 ## 3. Vấn đề cần người dùng xác nhận trước Phase 1
 
 ### Q1 — Ý nghĩa hai số trong tên
@@ -142,24 +160,15 @@ Cần xác nhận một scene thường có:
 
 Đề xuất: asset slot tự do, mỗi slot chọn `image` hoặc `video`.
 
-### Q3 — Định dạng script nguồn
+### Q3 — JSON Scenes schema
 
-Cần một ví dụ kịch bản thực tế đã ẩn thông tin nhạy cảm để chốt field và parser. Đề xuất hỗ trợ:
+Cần một fixture JSON Scenes thực tế đã ẩn thông tin nhạy cảm để chốt field và parser. Schema tối thiểu dự kiến gồm:
 
-- Markdown thân thiện để paste/chỉnh sửa.
-- JSON schema để import/export chính xác.
+- `order`, `title`, `summary`.
+- `narration`/voice-over trực tiếp trong Scene.
+- `image_prompt`, `video_prompt` và asset hints tùy chọn.
 
-CSV không phải định dạng chính cho script lồng nhiều field.
-
-### Q4 — Tạo kịch bản bằng cách nào
-
-Chọn một mức:
-
-1. Phase 1 chỉ render/copy prompt rồi paste/import kết quả từ ChatGPT.
-2. Gọi OpenAI API trực tiếp bằng API key riêng.
-3. Giữ cả hai, nhưng API integration là milestone sau editor.
-
-Đề xuất mức 1 cho MVP, mức 3 nếu muốn tự động hóa sớm.
+Import Markdown/CSV và parser tách Script → Scenes không thuộc Phase 1.
 
 ### Q5 — Scene approval
 
@@ -268,8 +277,7 @@ Trước khi implement, cần có câu trả lời tối thiểu cho:
 
 - Q1: semantics của canonical name.
 - Q2: asset structure mỗi scene.
-- Q3: một sample script và format mong muốn.
-- Q4: manual copy/paste hay LLM API.
+- Q3: một sample JSON Scenes và field bắt buộc.
 - Q6: quy tắc reorder sau generation.
 - Q7–Q11: account, budget, settings, rename fallback và terms cho PoC.
 - Q13–Q15: workspace/export/CapCut expectation trước Phase 3.

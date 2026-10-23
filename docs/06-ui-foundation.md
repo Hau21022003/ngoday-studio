@@ -2,7 +2,7 @@
 
 ## Source of truth
 
-Trang `Templates` là design source of truth cho toàn bộ sản phẩm. Mọi page mới — Episodes, Script Editor, Scenes, Assets, Queue, Media và Settings — phải dùng token và component trong foundation này, không tạo visual language riêng.
+Trang `Templates` là design source of truth cho toàn bộ sản phẩm. Mọi page mới — Episodes, Scenes, Assets, Queue, Media và Settings — phải dùng token và component trong foundation này, không tạo visual language riêng.
 
 Định hướng cố định: **Light Creative Studio / Production Workspace**. Giao diện sáng, tập trung cho công việc biên tập, mật độ vừa phải và tránh cảm giác dashboard SaaS chung chung.
 
@@ -42,12 +42,13 @@ Danh sách episode M3 dùng dữ liệu in-memory; action tạo/chỉnh sửa m�
 
 ## M3 Episode Workspace review routes
 
-Episode Workspace dùng dữ liệu mock/in-memory và giữ nguyên app shell M1. Overview là nội dung duy nhất được triển khai trong bước này; các tab còn lại chỉ xác nhận navigation shell:
+Episode Workspace dùng dữ liệu mock/in-memory và giữ nguyên app shell M1. Target navigation sau khi đơn giản hóa workflow chỉ gồm `Overview / Scenes / Assets`; không có tab `Script`. Overview là nội dung duy nhất đã được triển khai, các tab còn lại xác nhận navigation shell:
 
 - Overview: `/?episodeWorkspace=overview&episode=peaceful-moments#episodes`
-- Script placeholder: `/?episodeWorkspace=script&episode=peaceful-moments#episodes`
 - Scenes placeholder: `/?episodeWorkspace=scenes&episode=peaceful-moments#episodes`
 - Assets placeholder: `/?episodeWorkspace=assets&episode=peaceful-moments#episodes`
+
+Code hiện hành còn tab `Script` từ plan cũ; việc loại bỏ tab/route này thuộc lượt implementation kế tiếp, không nằm trong thay đổi tài liệu ngày 2026-10-24.
 
 ## Tokens
 

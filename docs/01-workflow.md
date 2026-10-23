@@ -2,11 +2,11 @@
 
 ## 1. Mục đích và phạm vi
 
-`ngoday-studio` là desktop app local-first hỗ trợ quy trình từ chủ đề, prompt và kịch bản đến media đã được duyệt, đặt tên và sắp xếp để đưa vào CapCut.
+`ngoday-studio` là desktop app local-first hỗ trợ quy trình từ Episode và Scene Template đến Scenes, media đã được duyệt, đặt tên và sắp xếp để đưa vào CapCut.
 
 Phạm vi của kế hoạch:
 
-- Quản lý Episode, prompt template, kịch bản và scene.
+- Quản lý Episode, prompt template, Scene và asset.
 - Điều khiển Google Flow bằng Playwright, với người dùng đăng nhập và giám sát.
 - Đặt tên media ngay trong project Flow trước khi tải xuống.
 - Lưu lịch sử lần tạo, duyệt media, tải xuống và xuất folder theo thứ tự.
@@ -22,19 +22,19 @@ Không thuộc phạm vi hiện tại:
 
 ## 2. Quy trình thủ công hiện tại
 
-1. Chọn prompt mẫu, thay tên chủ đề và gửi ChatGPT để tạo kịch bản.
-2. Đọc kịch bản, sửa nội dung và yêu cầu ChatGPT viết lại từng scene khi cần.
-3. Mở Google Flow, tạo project tương ứng với tập phim.
-4. Với từng scene, nhập prompt, chọn loại tạo ảnh/video và gắn character reference khi cần.
-5. Chờ tạo, xem kết quả và tạo lại nếu chưa đạt.
-6. Đổi tên trực tiếp từng asset trong project Flow theo scene.
-7. Tải media đã đặt tên về máy.
-8. Đưa toàn bộ media vào CapCut và dựng thủ công.
+1. Tạo Episode và chọn Scene Template.
+2. Nếu đã có nội dung hoặc kịch bản sẵn, dán vào trường `Nội dung nguồn`; nếu không, chỉ dùng metadata/ghi chú của Episode.
+3. Render prompt, copy sang ChatGPT thủ công và yêu cầu trả về JSON Scenes.
+4. Import JSON, review/chỉnh sửa/reorder/approve từng Scene; narration/voice-over nằm trực tiếp trong Scene.
+5. Mở Google Flow, tạo project tương ứng với tập phim.
+6. Với từng Scene, nhập prompt, chọn loại tạo ảnh/video và gắn character reference khi cần.
+7. Chờ tạo, xem kết quả và tạo lại nếu chưa đạt.
+8. Đổi tên trực tiếp từng asset trong project Flow theo Scene, tải media về máy rồi đưa vào CapCut thủ công.
 
 Các điểm dễ lỗi:
 
 - Prompt được copy thủ công nên có thể nhầm Episode hoặc nhầm scene.
-- Không có nguồn dữ liệu duy nhất cho phiên bản kịch bản, prompt đã gửi và media đã chọn.
+- Không có nguồn dữ liệu duy nhất cho Scene, narration, prompt đã gửi và media đã chọn.
 - Nhiều generation chạy gần nhau khiến khó xác định asset thuộc scene nào.
 - Retry có thể làm tốn credit hoặc sinh asset trùng nếu lần gửi trước đã thành công nhưng UI chưa phản hồi.
 - Tên trên Flow, tên file tải xuống và vị trí file local có thể không đồng nhất.
@@ -42,14 +42,15 @@ Các điểm dễ lỗi:
 
 ## 3. Quy trình đích
 
-### 3.1. Chuẩn bị Episode và kịch bản
+### 3.1. Chuẩn bị Episode và Scenes
 
-1. Tạo Episode với `title`, `topic`, `slug`, ghi chú và thông số mặc định.
-2. Chọn một phiên bản prompt template.
-3. Render template bằng biến, tối thiểu có `{{topic}}`, `{{episode_title}}` và `{{notes}}`.
-4. Tạo kịch bản local hoặc import kịch bản từ Markdown/JSON. Ở bản tối thiểu, app hỗ trợ copy prompt đã render để người dùng dùng với ChatGPT rồi paste/import kết quả; việc gọi LLM trực tiếp là một quyết định riêng.
-5. Tách kịch bản thành các scene có thứ tự ổn định.
-6. Chỉnh sửa, lưu revision và duyệt từng scene. Chỉ scene ở trạng thái `approved` mới được đưa vào queue Flow.
+1. Tạo Episode với `title`, `topic`, `slug`, mô tả, ghi chú và thông số mặc định.
+2. Mở flow tạo Scenes và chọn một phiên bản Scene Template.
+3. Nếu đã có nội dung/kịch bản sẵn, dán vào trường `Nội dung nguồn` tùy chọn. Trường này chỉ là input tạm để render prompt, không tạo `Script` object và không có revision/persistence riêng.
+4. Render template bằng biến, tối thiểu có `{{topic}}`, `{{episode_title}}`, `{{notes}}` và `{{source_content}}` tùy chọn.
+5. Copy prompt đã render sang ChatGPT thủ công; Phase 1 không tự động hóa ChatGPT web và không bắt buộc LLM API.
+6. Paste hoặc chọn file JSON Scenes do ChatGPT trả về. App validate toàn bộ payload và hiển thị preview trước khi import; lỗi không ghi dữ liệu nửa chừng.
+7. Review, chỉnh sửa, reorder và approve từng Scene. Mỗi Scene sở hữu trực tiếp `narration`/voice-over và các prompt media; chỉ Scene `approved` mới được dùng để lập asset hoặc đưa vào queue Flow.
 
 ### 3.2. Chuẩn bị job Flow
 
@@ -127,7 +128,8 @@ episode-slug/
     scene-02-01.mp4
   manifest.json
   manifest.csv
-  script.md
+  scenes.json
+  narration.md
 ```
 
 CapCut vẫn được thao tác thủ công. Export không chỉnh sửa hay tạo file project riêng của CapCut.
@@ -145,7 +147,7 @@ CapCut vẫn được thao tác thủ công. Export không chỉnh sửa hay t�
 
 | Đối tượng | Trạng thái đề xuất |
 | --- | --- |
-| Episode | `draft`, `script_ready`, `producing`, `ready_to_export`, `archived` |
+| Episode | `draft`, `scenes_ready`, `producing`, `ready_to_export`, `archived` |
 | Scene | `draft`, `in_review`, `approved`, `needs_changes` |
 | Asset slot | `draft`, `queued`, `generating`, `review`, `accepted`, `downloaded`, `failed` |
 | Job | `queued`, `running`, `retry_wait`, `waiting_user`, `paused`, `succeeded`, `failed`, `cancelled` |
