@@ -1,7 +1,8 @@
-import { Bell, Command, HelpCircle, Menu, Search } from "lucide-react"
-import { useState } from "react"
+import { Menu } from "lucide-react"
+import { useEffect, useState } from "react"
 
-import { StudioSidebar } from "@/components/studio-sidebar"
+import { StudioSidebar, type StudioRoute } from "@/components/studio-sidebar"
+import { TemplatesPage } from "@/components/templates-page"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -10,79 +11,74 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { WorkspaceOverview } from "@/components/workspace-overview"
-import {
-  WorkspaceCollection,
-  type CollectionSection,
-} from "@/components/workspace-collection"
+import { WorkspacePlaceholder } from "@/components/workspace-placeholder"
 
-export function App() {
-  const [activeItem, setActiveItem] = useState("Tổng quan")
+const routes: StudioRoute[] = ["episodes", "templates", "queue", "media", "settings"]
+
+function getRoute(): StudioRoute {
+  const route = window.location.hash.replace("#", "")
+  return routes.includes(route as StudioRoute) ? (route as StudioRoute) : "templates"
+}
+
+function App() {
+  const [activeRoute, setActiveRoute] = useState<StudioRoute>(getRoute)
   const [navigationOpen, setNavigationOpen] = useState(false)
+
+  useEffect(() => {
+    if (!window.location.hash) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#templates`)
+    }
+
+    const handleRouteChange = () => {
+      setActiveRoute(getRoute())
+      setNavigationOpen(false)
+    }
+
+    window.addEventListener("hashchange", handleRouteChange)
+    return () => window.removeEventListener("hashchange", handleRouteChange)
+  }, [])
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-border lg:block">
-        <StudioSidebar activeItem={activeItem} onNavigate={setActiveItem} />
+      <a
+        href="#main-content"
+        className="fixed left-3 top-3 z-[70] -translate-y-20 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-transform duration-150 focus:translate-y-0 focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        Bỏ qua điều hướng
+      </a>
+
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-sidebar border-r border-border lg:block">
+        <StudioSidebar activeRoute={activeRoute} />
       </aside>
 
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 flex h-16 items-center border-b border-border bg-background/95 px-4 backdrop-blur-sm sm:px-6 lg:px-8">
-          <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="mr-2 lg:hidden" aria-label="Mở điều hướng">
-                <Menu />
-              </Button>
-            </SheetTrigger>
-            <SheetContent>
-              <SheetTitle className="sr-only">Điều hướng NGoDay Studio</SheetTitle>
-              <SheetDescription className="sr-only">Chọn khu vực làm việc</SheetDescription>
-              <StudioSidebar
-                activeItem={activeItem}
-                onNavigate={(label) => {
-                  setActiveItem(label)
-                  setNavigationOpen(false)
-                }}
-              />
-            </SheetContent>
-          </Sheet>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>NGoDay Studio</span>
-              <span className="text-border-strong">/</span>
-              <span className="truncate font-semibold text-foreground">{activeItem}</span>
-            </div>
-          </div>
-
-          <button
+      <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
+        <SheetTrigger asChild>
+          <Button
             type="button"
-            className="mr-2 hidden h-9 w-full max-w-64 items-center gap-2 rounded-md border border-border bg-surface px-3 text-left text-xs text-muted-foreground outline-none hover:border-primary/20 focus-visible:ring-2 focus-visible:ring-ring sm:flex"
+            variant="outline"
+            size="icon"
+            aria-label="Mở điều hướng"
+            className="fixed left-4 top-5 z-40 bg-surface lg:hidden"
           >
-            <Search className="size-4" />
-            <span className="flex-1">Tìm tập phim, cảnh...</span>
-            <kbd className="flex items-center gap-0.5 rounded border border-border bg-muted px-1.5 py-0.5 font-sans text-[10px]">
-              <Command className="size-2.5" />K
-            </kbd>
-          </button>
-
-          <Button variant="ghost" size="icon" aria-label="Trợ giúp">
-            <HelpCircle />
+            <Menu aria-hidden="true" />
           </Button>
-          <Button variant="ghost" size="icon" aria-label="Thông báo" className="relative">
-            <Bell />
-            <span className="absolute right-2 top-2 size-1.5 rounded-full bg-accent ring-2 ring-background" />
-          </Button>
-        </header>
+        </SheetTrigger>
+        <SheetContent>
+          <SheetTitle className="sr-only">Điều hướng Ngộ Dậy Studio</SheetTitle>
+          <SheetDescription className="sr-only">Chọn khu vực làm việc</SheetDescription>
+          <StudioSidebar activeRoute={activeRoute} onNavigate={() => setNavigationOpen(false)} />
+        </SheetContent>
+      </Sheet>
 
-        <main>
-          {activeItem === "Tổng quan" ? (
-            <WorkspaceOverview />
-          ) : (
-            <WorkspaceCollection section={activeItem as CollectionSection} />
-          )}
-        </main>
-      </div>
+      <main id="main-content" className="min-h-screen scroll-mt-4 lg:pl-sidebar">
+        {activeRoute === "templates" ? (
+          <TemplatesPage />
+        ) : (
+          <WorkspacePlaceholder route={activeRoute} />
+        )}
+      </main>
     </div>
   )
 }
+
+export { App }

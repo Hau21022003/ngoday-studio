@@ -11,7 +11,7 @@ function createWindow() {
     height: 920,
     minWidth: 860,
     minHeight: 640,
-    backgroundColor: "#f7f5ef",
+    backgroundColor: "#faf8f4",
     show: false,
     titleBarStyle: "default",
     webPreferences: {

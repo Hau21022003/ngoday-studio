@@ -2,7 +2,7 @@
   "name": "ngoday-studio",
   "version": "0.1.0",
   "private": true,
-  "description": "Local-first production workspace for NGoDay Studio",
+  "description": "Local-first production workspace for Ngộ Dậy Studio",
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
