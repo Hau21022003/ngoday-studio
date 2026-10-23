@@ -1,0 +1,99 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+
+  --font-sans: "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+
+  --radius-sm: calc(var(--radius) - 3px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+}
+
+:root {
+  color-scheme: light;
+  --background: oklch(0.977 0.008 82);
+  --foreground: oklch(0.265 0.045 257);
+  --surface: oklch(0.998 0.002 90);
+  --primary: oklch(0.335 0.085 257);
+  --primary-foreground: oklch(0.985 0.003 90);
+  --accent: oklch(0.72 0.17 53);
+  --accent-foreground: oklch(0.235 0.04 45);
+  --accent-strong: oklch(0.53 0.145 48);
+  --accent-soft: oklch(0.955 0.038 67);
+  --muted: oklch(0.955 0.009 82);
+  --muted-foreground: oklch(0.52 0.028 257);
+  --border: oklch(0.9 0.012 82);
+  --border-strong: oklch(0.79 0.018 82);
+  --input: oklch(0.875 0.014 82);
+  --ring: oklch(0.42 0.09 257);
+  --success: oklch(0.49 0.1 157);
+  --success-soft: oklch(0.95 0.035 152);
+  --radius: 0.5rem;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  min-width: 320px;
+  background: var(--background);
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 24%, transparent);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--primary) 24%, transparent);
+  background-clip: padding-box;
+}
