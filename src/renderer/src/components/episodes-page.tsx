@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 
+import { EpisodeAuthoringPage, type EpisodeAuthoringMode } from "@/components/episode-authoring-page"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -185,6 +186,13 @@ function TopicBadge({ topic }: { topic: EpisodeTopic }) {
   )
 }
 
+function getEpisodeAuthorHref(mode: EpisodeAuthoringMode, episodeId?: string) {
+  const params = new URLSearchParams()
+  params.set("episodeAuthor", mode)
+  if (episodeId) params.set("episode", episodeId)
+  return `${window.location.pathname}?${params.toString()}#episodes`
+}
+
 function EpisodeActions({ episode }: { episode: EpisodeRecord }) {
   return (
     <details className="group/actions relative inline-block text-left">
@@ -199,7 +207,14 @@ function EpisodeActions({ episode }: { episode: EpisodeRecord }) {
         aria-label={`Thao tác cho ${episode.title}`}
         className="absolute right-0 z-20 mt-1 w-44 rounded-md border border-border bg-surface p-1 text-left shadow-overlay"
       >
-        {["Mở workspace", "Chỉnh sửa", "Lưu trữ"].map((label) => (
+        <a
+          href={getEpisodeAuthorHref("edit", episode.id)}
+          role="menuitem"
+          className="block w-full rounded px-2 py-1.5 text-left text-xs font-medium text-primary hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+        >
+          Chỉnh sửa
+        </a>
+        {["Mở workspace", "Lưu trữ"].map((label) => (
           <button
             key={label}
             type="button"
@@ -303,6 +318,10 @@ function sortingFromOption(value: SortOption): DataTableSorting {
 }
 
 function EpisodesPage() {
+  const [authoringMode] = useState<EpisodeAuthoringMode | null>(() => {
+    const value = new URLSearchParams(window.location.search).get("episodeAuthor")
+    return value === "create" || value === "edit" ? value : null
+  })
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("episodeQ") ?? "")
   const [status, setStatus] = useState<"all" | EpisodeStatus>(() =>
     getSearchParam("episodeStatus", ["all", ...Object.keys(statuses)] as Array<"all" | EpisodeStatus>, "all"),
@@ -342,6 +361,10 @@ function EpisodesPage() {
     window.history.replaceState(null, "", url)
   }
 
+  if (authoringMode) {
+    return <EpisodeAuthoringPage mode={authoringMode} />
+  }
+
   return (
     <div className="min-h-screen bg-background px-5 py-6 sm:px-7 lg:px-8 lg:py-7">
       <PageHeader
@@ -349,14 +372,14 @@ function EpisodesPage() {
         description="Quản lý các episode video YouTube và theo dõi tiến độ sản xuất."
         action={
           <Button
-            type="button"
+            asChild
             variant="accent"
             size="lg"
-            aria-disabled="true"
-            title="Luồng tạo episode sẽ được triển khai ở bước tiếp theo"
           >
-            <Plus aria-hidden="true" />
-            Tạo episode mới
+            <a href={getEpisodeAuthorHref("create")}>
+              <Plus aria-hidden="true" />
+              Tạo episode mới
+            </a>
           </Button>
         }
       />
