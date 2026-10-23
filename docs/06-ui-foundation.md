@@ -33,12 +33,21 @@ Luồng authoring hai bước được phản ánh bằng `authorStep=1|2`: `1` 
 
 ## M3 Episodes List review routes
 
-Phần đầu M3 chỉ gồm danh sách episode full-width, dùng dữ liệu in-memory và chưa nối sang create/edit/archive hoặc Episode workspace:
+Danh sách episode M3 dùng dữ liệu in-memory; action tạo/chỉnh sửa mở Episode authoring và action workspace mở Episode Workspace cùng trong app shell hiện có:
 
 - Ready: `/#episodes`
 - Empty: `/?demo=empty#episodes`
 - Loading: `/?demo=loading#episodes`
 - Error + retry: `/?demo=error#episodes`
+
+## M3 Episode Workspace review routes
+
+Episode Workspace dùng dữ liệu mock/in-memory và giữ nguyên app shell M1. Overview là nội dung duy nhất được triển khai trong bước này; các tab còn lại chỉ xác nhận navigation shell:
+
+- Overview: `/?episodeWorkspace=overview&episode=peaceful-moments#episodes`
+- Script placeholder: `/?episodeWorkspace=script&episode=peaceful-moments#episodes`
+- Scenes placeholder: `/?episodeWorkspace=scenes&episode=peaceful-moments#episodes`
+- Assets placeholder: `/?episodeWorkspace=assets&episode=peaceful-moments#episodes`
 
 ## Tokens
 

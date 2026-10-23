@@ -1,10 +1,10 @@
-import { useRef, type KeyboardEvent } from "react"
+import { useRef, type KeyboardEvent, type ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
 
 type TabItem<T extends string> = {
   value: T
-  label: string
+  label: ReactNode
 }
 
 type TabsProps<T extends string> = {

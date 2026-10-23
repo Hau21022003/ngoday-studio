@@ -18,6 +18,7 @@ import {
 import { useCallback, useEffect, useState } from "react"
 
 import { EpisodeAuthoringPage, type EpisodeAuthoringMode } from "@/components/episode-authoring-page"
+import { EpisodeWorkspacePage, type EpisodeWorkspaceTab } from "@/components/episode-workspace-page"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -193,6 +194,13 @@ function getEpisodeAuthorHref(mode: EpisodeAuthoringMode, episodeId?: string) {
   return `${window.location.pathname}?${params.toString()}#episodes`
 }
 
+function getEpisodeWorkspaceHref(tab: EpisodeWorkspaceTab, episodeId: string) {
+  const params = new URLSearchParams()
+  params.set("episodeWorkspace", tab)
+  params.set("episode", episodeId)
+  return `${window.location.pathname}?${params.toString()}#episodes`
+}
+
 function EpisodeActions({ episode }: { episode: EpisodeRecord }) {
   return (
     <details className="group/actions relative inline-block text-left">
@@ -208,13 +216,20 @@ function EpisodeActions({ episode }: { episode: EpisodeRecord }) {
         className="absolute right-0 z-20 mt-1 w-44 rounded-md border border-border bg-surface p-1 text-left shadow-overlay"
       >
         <a
+          href={getEpisodeWorkspaceHref("overview", episode.id)}
+          role="menuitem"
+          className="block w-full rounded px-2 py-1.5 text-left text-xs font-medium text-primary hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+        >
+          Mở workspace
+        </a>
+        <a
           href={getEpisodeAuthorHref("edit", episode.id)}
           role="menuitem"
           className="block w-full rounded px-2 py-1.5 text-left text-xs font-medium text-primary hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
         >
           Chỉnh sửa
         </a>
-        {["Mở workspace", "Lưu trữ"].map((label) => (
+        {["Lưu trữ"].map((label) => (
           <button
             key={label}
             type="button"
@@ -322,6 +337,12 @@ function EpisodesPage() {
     const value = new URLSearchParams(window.location.search).get("episodeAuthor")
     return value === "create" || value === "edit" ? value : null
   })
+  const [workspaceTab] = useState<EpisodeWorkspaceTab | null>(() => {
+    const value = new URLSearchParams(window.location.search).get("episodeWorkspace")
+    return value === "overview" || value === "script" || value === "scenes" || value === "assets"
+      ? value
+      : null
+  })
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("episodeQ") ?? "")
   const [status, setStatus] = useState<"all" | EpisodeStatus>(() =>
     getSearchParam("episodeStatus", ["all", ...Object.keys(statuses)] as Array<"all" | EpisodeStatus>, "all"),
@@ -363,6 +384,10 @@ function EpisodesPage() {
 
   if (authoringMode) {
     return <EpisodeAuthoringPage mode={authoringMode} />
+  }
+
+  if (workspaceTab) {
+    return <EpisodeWorkspacePage initialTab={workspaceTab} />
   }
 
   return (
