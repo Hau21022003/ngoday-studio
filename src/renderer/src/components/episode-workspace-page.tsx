@@ -6,10 +6,10 @@ import {
   Clapperboard,
   Clock3,
   Copy,
+  Download,
   Ellipsis,
   FileImage,
   FileText,
-  Film,
   Image as ImageIcon,
   Info,
   NotebookPen,
@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { useEffect, useState } from "react"
 
+import { EpisodeAssetsTab } from "@/components/episode-assets-tab"
 import { EpisodeScenesTab } from "@/components/episode-scenes-tab"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -261,22 +262,9 @@ function Overview({ notes, onNotesChange }: { notes: string; onNotesChange: (val
   )
 }
 
-function PendingWorkspaceTab({ tab }: { tab: Exclude<EpisodeWorkspaceTab, "overview"> }) {
-  const item = quickActions.find((action) => action.tab === tab)
-  const Icon = item?.icon ?? Film
-  return (
-    <section className="grid min-h-[28rem] place-items-center px-5 text-center" aria-labelledby="pending-workspace-title">
-      <div className="max-w-sm">
-        <Icon aria-hidden="true" className="mx-auto size-8 text-muted-foreground" />
-        <h2 id="pending-workspace-title" className="mt-3 text-base font-bold text-primary">{item?.label ?? tab}</h2>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">Khu vực này sẽ được triển khai ở bước M3 tiếp theo.</p>
-      </div>
-    </section>
-  )
-}
-
 function EpisodeWorkspacePage({ initialTab }: { initialTab: EpisodeWorkspaceTab }) {
   const [activeTab, setActiveTab] = useState<EpisodeWorkspaceTab>(initialTab)
+  const [assetExportRequest, setAssetExportRequest] = useState(0)
   const [notes, setNotes] = useState("")
   const [notesDirty, setNotesDirty] = useState(false)
 
@@ -316,9 +304,15 @@ function EpisodeWorkspacePage({ initialTab }: { initialTab: EpisodeWorkspaceTab 
             </div>
           </div>
           <div className="flex items-center gap-2 self-start xl:self-auto">
-            <Button asChild variant="accent" size="lg">
-              <a href={episodeEditHref()}><Pencil aria-hidden="true" />Chỉnh sửa</a>
-            </Button>
+            {activeTab === "assets" ? (
+              <Button type="button" variant="accent" size="lg" onClick={() => setAssetExportRequest((value) => value + 1)}>
+                <Download aria-hidden="true" />Xuất media
+              </Button>
+            ) : (
+              <Button asChild variant="accent" size="lg">
+                <a href={episodeEditHref()}><Pencil aria-hidden="true" />Chỉnh sửa</a>
+              </Button>
+            )}
             <WorkspaceMenu />
           </div>
         </div>
@@ -352,7 +346,7 @@ function EpisodeWorkspacePage({ initialTab }: { initialTab: EpisodeWorkspaceTab 
         ) : activeTab === "scenes" ? (
           <EpisodeScenesTab />
         ) : (
-          <PendingWorkspaceTab tab={activeTab} />
+          <EpisodeAssetsTab exportRequest={assetExportRequest} />
         )}
       </main>
     </div>
