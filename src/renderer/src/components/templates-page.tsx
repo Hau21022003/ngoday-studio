@@ -6,30 +6,25 @@ import {
   PencilLine,
   Plus,
 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  DataTable,
+  type DataTableColumn,
+  type DataTableSorting,
+} from "@/components/ui/data-table"
 import {
   DetailDivider,
   DetailPanel,
   DetailPanelHeader,
   DetailSection,
 } from "@/components/ui/detail-panel"
-import { EmptyState } from "@/components/ui/state-feedback"
 import { PageHeader } from "@/components/ui/page-header"
 import { SearchField } from "@/components/ui/search-field"
 import { Select } from "@/components/ui/select"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { Tabs, type TabItem } from "@/components/ui/tabs"
 import { TemplateThumbnail, type ThumbnailKind } from "@/components/ui/template-thumbnail"
 
@@ -158,11 +153,62 @@ const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   hour12: false,
   timeZone: "Asia/Ho_Chi_Minh",
 })
-const numberFormatter = new Intl.NumberFormat("vi-VN")
-
 function formatDate(value: string) {
   return dateFormatter.format(new Date(`${value}T12:00:00+07:00`))
 }
+
+const templateColumns: readonly DataTableColumn<TemplateItem>[] = [
+  {
+    id: "name",
+    header: "Template",
+    width: "41%",
+    sortValue: (template) => template.name,
+    searchableValue: (template) => `${template.name} ${template.description}`,
+    cell: (template) => (
+      <div className="flex min-w-0 items-center gap-3">
+        <TemplateThumbnail kind={template.thumbnail} />
+        <span className="min-w-0">
+          <span className="block truncate font-bold text-primary">{template.name}</span>
+          <span className="mt-0.5 line-clamp-2 text-xs leading-4 text-muted-foreground">
+            {template.description}
+          </span>
+        </span>
+      </div>
+    ),
+  },
+  {
+    id: "purpose",
+    header: "Mục đích",
+    width: "14%",
+    searchableValue: (template) => template.purposeLabel,
+    cell: (template) => (
+      <Badge variant={purposeTone[template.purpose]}>{template.purposeLabel}</Badge>
+    ),
+  },
+  {
+    id: "version",
+    header: "Phiên bản",
+    width: "10%",
+    className: "px-2 text-xs font-medium tabular-nums text-muted-foreground",
+    headerClassName: "px-2",
+    cell: (template) => template.version,
+  },
+  {
+    id: "updatedAt",
+    header: "Cập nhật",
+    width: "14%",
+    sortValue: (template) => template.updatedAt,
+    className: "text-xs tabular-nums text-muted-foreground",
+    cell: (template) => formatDate(template.updatedAt),
+  },
+  {
+    id: "status",
+    header: "Trạng thái",
+    width: "16%",
+    searchableValue: (template) => template.status,
+    cell: (template) => <StatusBadge label={template.status} tone={template.statusTone} />,
+  },
+]
 
 function getSearchParam(name: string, allowed: readonly string[], fallback: string) {
   const value = new URLSearchParams(window.location.search).get(name)
@@ -175,7 +221,7 @@ function updateTemplateUrl(state: {
   query: string
   purpose: string
   status: string
-  sort: string
+  sorting: DataTableSorting | null
 }) {
   const url = new URL(window.location.href)
   url.searchParams.set("category", state.category)
@@ -183,7 +229,12 @@ function updateTemplateUrl(state: {
   state.query ? url.searchParams.set("q", state.query) : url.searchParams.delete("q")
   state.purpose !== "all" ? url.searchParams.set("purpose", state.purpose) : url.searchParams.delete("purpose")
   state.status !== "all" ? url.searchParams.set("status", state.status) : url.searchParams.delete("status")
-  state.sort !== "updated-desc" ? url.searchParams.set("sort", state.sort) : url.searchParams.delete("sort")
+  const sortParam = !state.sorting
+    ? "none"
+    : state.sorting.columnId === "updatedAt"
+      ? `updated-${state.sorting.direction}`
+      : `${state.sorting.columnId}-${state.sorting.direction}`
+  sortParam !== "updated-desc" ? url.searchParams.set("sort", sortParam) : url.searchParams.delete("sort")
   window.history.replaceState(null, "", url)
 }
 
@@ -197,6 +248,18 @@ function getInitialTemplateId() {
   return templates.some((template) => template.id === templateId) ? templateId! : templates[0]!.id
 }
 
+function getInitialSorting(): DataTableSorting | null {
+  const value = new URLSearchParams(window.location.search).get("sort")
+  if (value === "none") return null
+
+  if (value === "updated-asc") return { columnId: "updatedAt", direction: "asc" }
+  if (value === "updated-desc") return { columnId: "updatedAt", direction: "desc" }
+
+  const match = value?.match(/^(name|updatedAt)-(asc|desc)$/)
+  if (!match) return { columnId: "updatedAt", direction: "desc" }
+  return { columnId: match[1]!, direction: match[2] as "asc" | "desc" }
+}
+
 function TemplatesPage() {
   const [category, setCategory] = useState<Category>(getInitialCategory)
   const [selectedId, setSelectedId] = useState(getInitialTemplateId)
@@ -207,33 +270,23 @@ function TemplatesPage() {
   const [status, setStatus] = useState(() =>
     getSearchParam("status", ["all", "success", "warning", "neutral"], "all"),
   )
-  const [sort, setSort] = useState(() =>
-    getSearchParam("sort", ["updated-desc", "updated-asc", "name-asc"], "updated-desc"),
-  )
+  const [sorting, setSorting] = useState<DataTableSorting | null>(getInitialSorting)
+  const [selectedRowIds, setSelectedRowIds] = useState<string[]>([])
 
   useEffect(
-    () => updateTemplateUrl({ category, templateId: selectedId, query, purpose, status, sort }),
-    [category, purpose, query, selectedId, sort, status],
+    () => updateTemplateUrl({ category, templateId: selectedId, query, purpose, sorting, status }),
+    [category, purpose, query, selectedId, sorting, status],
   )
 
-  const filteredTemplates = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase("vi")
-    const result = templates.filter((template) => {
+  const filterTemplate = useCallback(
+    (template: TemplateItem) => {
       const matchesCategory = category === "all" || template.purpose === category
       const matchesPurpose = purpose === "all" || template.purpose === purpose
       const matchesStatus = status === "all" || template.statusTone === status
-      const matchesQuery =
-        !normalizedQuery ||
-        `${template.name} ${template.description}`.toLocaleLowerCase("vi").includes(normalizedQuery)
-      return matchesCategory && matchesPurpose && matchesStatus && matchesQuery
-    })
-
-    return [...result].sort((left, right) => {
-      if (sort === "name-asc") return left.name.localeCompare(right.name, "vi")
-      if (sort === "updated-asc") return left.updatedAt.localeCompare(right.updatedAt)
-      return right.updatedAt.localeCompare(left.updatedAt)
-    })
-  }, [category, purpose, query, sort, status])
+      return matchesCategory && matchesPurpose && matchesStatus
+    },
+    [category, purpose, status],
+  )
 
   const selectedTemplate = templates.find((template) => template.id === selectedId) ?? templates[0]!
 
@@ -261,144 +314,98 @@ function TemplatesPage() {
           />
         </div>
 
-        <div className="mt-4 flex flex-col gap-2.5 lg:flex-row lg:items-center">
-          <SearchField
-            label="Tìm template"
-            name="template-search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Tìm template…"
-            className="min-w-52 flex-1"
-          />
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 lg:flex lg:shrink-0">
-            <Select
-              label="Lọc theo mục đích"
-              name="purpose-filter"
-              value={purpose}
-              onChange={(event) => setPurpose(event.target.value)}
-              className="lg:w-32"
-            >
-              <option value="all">Mục đích</option>
-              <option value="script">Script</option>
-              <option value="hook">Hook</option>
-              <option value="thumbnail">Thumbnail</option>
-              <option value="description">Mô tả</option>
-              <option value="idea">Ý tưởng</option>
-            </Select>
-            <Select
-              label="Lọc theo trạng thái"
-              name="status-filter"
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
-              className="lg:w-32"
-            >
-              <option value="all">Trạng thái</option>
-              <option value="success">Đang dùng</option>
-              <option value="warning">Thử nghiệm</option>
-              <option value="neutral">Không hoạt động</option>
-            </Select>
-            <Select
-              label="Sắp xếp template"
-              name="template-sort"
-              value={sort}
-              onChange={(event) => setSort(event.target.value)}
-              className="lg:w-32"
-            >
-              <option value="updated-desc">Sắp xếp</option>
-              <option value="updated-asc">Cũ nhất</option>
-              <option value="name-asc">Tên A–Z</option>
-            </Select>
-          </div>
-        </div>
-
         <section
           id="templates-panel"
           role="tabpanel"
           aria-labelledby={`templates-panel-${category}-tab`}
           aria-label={`Template — ${categoryTabs.find((item) => item.value === category)?.label ?? "Tất cả"}`}
-          className="mt-4 overflow-hidden rounded-lg border border-border bg-surface shadow-panel"
+          className="mt-4"
         >
-          <p className="sr-only" aria-live="polite">
-            Hiển thị {numberFormatter.format(filteredTemplates.length)} template. Đang xem {selectedTemplate.name}.
-          </p>
-          {filteredTemplates.length === 0 ? (
-            <EmptyState />
-          ) : (
-            <TableContainer>
-              <Table className="min-w-[720px] table-fixed">
-                <caption className="sr-only">Danh sách template nội dung</caption>
-                <colgroup>
-                  <col className="w-[41%]" />
-                  <col className="w-[14%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[14%]" />
-                  <col className="w-[16%]" />
-                  <col className="w-[5%]" />
-                </colgroup>
-                <TableHeader>
-                  <tr>
-                    <TableHead>Template</TableHead>
-                    <TableHead>Mục đích</TableHead>
-                    <TableHead className="px-2">Phiên bản</TableHead>
-                    <TableHead>Cập nhật</TableHead>
-                    <TableHead>Trạng thái</TableHead>
-                    <TableHead><span className="sr-only">Thao tác</span></TableHead>
-                  </tr>
-                </TableHeader>
-                <TableBody>
-                  {filteredTemplates.map((template) => {
-                    const selected = template.id === selectedTemplate.id
-                    return (
-                      <TableRow
-                        key={template.id}
-                        selected={selected}
-                        className={selected ? "shadow-[inset_2px_0_0_var(--accent)]" : undefined}
+          <DataTable
+            caption="Danh sách template nội dung"
+            columns={templateColumns}
+            data={templates}
+            getRowId={(template) => template.id}
+            getRowLabel={(template) => template.name}
+            activeRowId={selectedTemplate.id}
+            globalFilter={query}
+            filterFn={filterTemplate}
+            sorting={sorting}
+            onSortingChange={setSorting}
+            onRowClick={(template) => setSelectedId(template.id)}
+            pagination={{ pageSize: 5, pageSizeOptions: [5, 10] }}
+            rowSelection={{
+              selectedRowIds,
+              onSelectionChange: setSelectedRowIds,
+            }}
+            rowActions={(template) => (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Mở thao tác cho ${template.name}`}
+              >
+                <MoreVertical aria-hidden="true" />
+              </Button>
+            )}
+            toolbar={({ clearSelection, filteredRowCount, selectedRowCount }) => (
+              <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
+                <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                  <SearchField
+                    label="Tìm template"
+                    name="template-search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Tìm template…"
+                    className="min-w-52 flex-1"
+                  />
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground" aria-live="polite">
+                    {filteredRowCount} template
+                  </span>
+                  {selectedRowCount > 0 && (
+                    <span className="inline-flex h-control items-center gap-2 self-start rounded-md border border-accent/20 bg-accent-soft px-2.5 text-xs font-semibold text-accent-strong sm:self-auto">
+                      Đã chọn {selectedRowCount}
+                      <button
+                        type="button"
+                        onClick={clearSelection}
+                        className="rounded px-1 py-0.5 hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
                       >
-                        <TableCell>
-                          <button
-                            type="button"
-                            aria-pressed={selected}
-                            onClick={() => setSelectedId(template.id)}
-                            className="flex w-full min-w-0 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
-                          >
-                            <TemplateThumbnail kind={template.thumbnail} />
-                            <span className="min-w-0">
-                              <span className="block truncate font-bold text-primary">{template.name}</span>
-                              <span className="mt-0.5 line-clamp-2 text-xs leading-4 text-muted-foreground">
-                                {template.description}
-                              </span>
-                            </span>
-                          </button>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={purposeTone[template.purpose]}>{template.purposeLabel}</Badge>
-                        </TableCell>
-                        <TableCell className="px-2 text-xs font-medium tabular-nums text-muted-foreground">
-                          {template.version}
-                        </TableCell>
-                        <TableCell className="text-xs tabular-nums text-muted-foreground">
-                          {formatDate(template.updatedAt)}
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge label={template.status} tone={template.statusTone} />
-                        </TableCell>
-                        <TableCell className="px-2 text-right">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Mở thao tác cho ${template.name}`}
-                          >
-                            <MoreVertical aria-hidden="true" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
+                        Bỏ chọn
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2.5 sm:flex sm:shrink-0">
+                  <Select
+                    label="Lọc theo mục đích"
+                    name="purpose-filter"
+                    value={purpose}
+                    onChange={(event) => setPurpose(event.target.value)}
+                    className="sm:w-36"
+                  >
+                    <option value="all">Mục đích</option>
+                    <option value="script">Script</option>
+                    <option value="hook">Hook</option>
+                    <option value="thumbnail">Thumbnail</option>
+                    <option value="description">Mô tả</option>
+                    <option value="idea">Ý tưởng</option>
+                  </Select>
+                  <Select
+                    label="Lọc theo trạng thái"
+                    name="status-filter"
+                    value={status}
+                    onChange={(event) => setStatus(event.target.value)}
+                    className="sm:w-40"
+                  >
+                    <option value="all">Trạng thái</option>
+                    <option value="success">Đang dùng</option>
+                    <option value="warning">Thử nghiệm</option>
+                    <option value="neutral">Không hoạt động</option>
+                  </Select>
+                </div>
+              </div>
+            )}
+          />
         </section>
       </div>
 
