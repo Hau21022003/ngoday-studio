@@ -153,6 +153,12 @@ button:not(:disabled) {
   }
 }
 
+@media (min-width: 1480px) {
+  .scene-toolbar {
+    grid-template-columns: minmax(13rem, 1.35fr) minmax(9rem, 0.85fr) minmax(10rem, 0.95fr) minmax(10rem, 0.9fr);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

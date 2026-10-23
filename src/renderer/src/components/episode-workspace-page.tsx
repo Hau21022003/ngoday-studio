@@ -14,20 +14,20 @@ import {
   Info,
   NotebookPen,
   Pencil,
-  ScrollText,
   Target,
   Zap,
   type LucideIcon,
 } from "lucide-react"
 import { useEffect, useState } from "react"
 
+import { EpisodeScenesTab } from "@/components/episode-scenes-tab"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, type TabItem } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
-type EpisodeWorkspaceTab = "assets" | "overview" | "scenes" | "script"
+type EpisodeWorkspaceTab = "assets" | "overview" | "scenes"
 
 const workspaceEpisode = {
   id: "peaceful-moments",
@@ -55,7 +55,6 @@ const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
 
 const tabItems: readonly TabItem<EpisodeWorkspaceTab>[] = [
   { value: "overview", label: <><ImageIcon aria-hidden="true" className="size-4" />Overview</> },
-  { value: "script", label: <><ScrollText aria-hidden="true" className="size-4" />Script</> },
   { value: "scenes", label: <><Clapperboard aria-hidden="true" className="size-4" />Scenes</> },
   { value: "assets", label: <><FileImage aria-hidden="true" className="size-4" />Assets</> },
 ]
@@ -66,7 +65,6 @@ const quickActions: ReadonlyArray<{
   label: string
   tab: Exclude<EpisodeWorkspaceTab, "overview">
 }> = [
-  { tab: "script", icon: ScrollText, label: "Mở Script", description: "Xem và chỉnh sửa kịch bản" },
   { tab: "scenes", icon: Clapperboard, label: "Quản lý Scenes", description: "Tổ chức và sắp xếp các cảnh" },
   { tab: "assets", icon: FileImage, label: "Quản lý Assets", description: "Xem media và tài nguyên" },
 ]
@@ -151,7 +149,6 @@ function EpisodeInformation() {
 
 function ProductionProgress() {
   const steps = [
-    { label: "Script", detail: "Hoàn thành", dot: "bg-success", text: "text-success" },
     { label: "Scenes", detail: "Đang thực hiện", dot: "bg-warning", text: "text-warning" },
     { label: "Assets", detail: "Chưa bắt đầu", dot: "bg-border-strong", text: "text-muted-foreground" },
   ]
@@ -172,7 +169,7 @@ function ProductionProgress() {
         </div>
         <span className="text-xs font-bold tabular-nums text-primary">{workspaceEpisode.progress}%</span>
       </div>
-      <div className="mt-4 grid grid-cols-3 divide-x divide-border">
+      <div className="mt-4 grid grid-cols-2 divide-x divide-border">
         {steps.map((step) => (
           <div key={step.label} className="flex min-w-0 items-start gap-2 px-3 first:pl-0 last:pr-0">
             <span aria-hidden="true" className={cn("mt-0.5 size-3 shrink-0 rounded-full", step.dot)} />
@@ -191,7 +188,7 @@ function QuickActions() {
   return (
     <section className="rounded-lg border border-border bg-surface p-4 shadow-panel sm:p-5" aria-labelledby="quick-actions-title">
       <div id="quick-actions-title"><SectionHeading icon={Zap}>Thao tác nhanh</SectionHeading></div>
-      <div className="mt-3 grid gap-2 2xl:grid-cols-3">
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {quickActions.map((action) => {
           const Icon = action.icon
           return (
@@ -352,6 +349,8 @@ function EpisodeWorkspacePage({ initialTab }: { initialTab: EpisodeWorkspaceTab 
               setNotesDirty(true)
             }}
           />
+        ) : activeTab === "scenes" ? (
+          <EpisodeScenesTab />
         ) : (
           <PendingWorkspaceTab tab={activeTab} />
         )}

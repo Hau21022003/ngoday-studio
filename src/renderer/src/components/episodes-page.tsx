@@ -339,7 +339,7 @@ function EpisodesPage() {
   })
   const [workspaceTab] = useState<EpisodeWorkspaceTab | null>(() => {
     const value = new URLSearchParams(window.location.search).get("episodeWorkspace")
-    return value === "overview" || value === "script" || value === "scenes" || value === "assets"
+    return value === "overview" || value === "scenes" || value === "assets"
       ? value
       : null
   })
