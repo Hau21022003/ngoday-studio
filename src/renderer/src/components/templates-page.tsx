@@ -1,16 +1,29 @@
 import {
   CalendarClock,
   ChartNoAxesColumnIncreasing,
+  CheckCircle2,
   CircleDot,
   Info,
   Layers3,
-  MoreVertical,
+  Pencil,
   Plus,
   UserRound,
+  X,
   type LucideIcon,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 
+import { TemplateAuthoringPage, type AuthoringMode } from "@/components/template-authoring-page"
+import {
+  getCurrentVersion,
+  initialTemplates,
+  purposeLabels,
+  purposeTones,
+  statusPresentation,
+  type Purpose,
+  type TemplateRecord,
+  type TemplateVariableDefinition,
+} from "@/components/template-data"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -27,125 +40,16 @@ import {
 import { PageHeader } from "@/components/ui/page-header"
 import { SearchField } from "@/components/ui/search-field"
 import { Select } from "@/components/ui/select"
-import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Tabs, type TabItem } from "@/components/ui/tabs"
-import { TemplateThumbnail, type ThumbnailKind } from "@/components/ui/template-thumbnail"
+import { TemplateThumbnail } from "@/components/ui/template-thumbnail"
 
-type Category = "all" | "script" | "thumbnail" | "hook" | "description" | "idea" | "other"
-type Purpose = Exclude<Category, "all" | "other">
+type Category = "all" | Purpose
 type DetailTab = "overview" | "content" | "variables" | "history"
 type DemoState = "ready" | "empty" | "loading" | "error"
+type AuthorDemoState = "ready" | "loading" | "error" | "save-error"
 type SortOption = "updated-desc" | "updated-asc" | "name-asc" | "name-desc"
-
-type TemplateItem = {
-  id: string
-  name: string
-  description: string
-  purpose: Purpose
-  purposeLabel: string
-  version: string
-  updatedAt: string
-  status: string
-  statusTone: StatusTone
-  thumbnail: ThumbnailKind
-  usageCount: number
-}
-
-type TemplateVariable = {
-  name: string
-  description: string
-}
-
-const templates: TemplateItem[] = [
-  {
-    id: "youtube-long-form",
-    name: "YouTube Script (Long-form)",
-    description: "Tạo kịch bản chi tiết cho video dạng dài với cấu trúc rõ ràng, lôi cuốn.",
-    purpose: "script",
-    purposeLabel: "Script",
-    version: "v1.2",
-    updatedAt: "2026-10-22",
-    status: "Đang dùng",
-    statusTone: "success",
-    thumbnail: "desk",
-    usageCount: 24,
-  },
-  {
-    id: "youtube-hook",
-    name: "YouTube Hook Generator",
-    description: "Tạo nhiều phiên bản hook hấp dẫn dành cho video.",
-    purpose: "hook",
-    purposeLabel: "Hook",
-    version: "v1.0",
-    updatedAt: "2026-10-20",
-    status: "Đang dùng",
-    statusTone: "success",
-    thumbnail: "mountain",
-    usageCount: 18,
-  },
-  {
-    id: "thumbnail-concept",
-    name: "Thumbnail Concept",
-    description: "Tạo ý tưởng thumbnail sáng tạo, phù hợp với nội dung video.",
-    purpose: "thumbnail",
-    purposeLabel: "Thumbnail",
-    version: "v1.1",
-    updatedAt: "2026-10-18",
-    status: "Thử nghiệm",
-    statusTone: "warning",
-    thumbnail: "studio",
-    usageCount: 9,
-  },
-  {
-    id: "video-description",
-    name: "Video Description",
-    description: "Tạo mô tả YouTube chuẩn SEO, bao gồm từ khóa và timestamp.",
-    purpose: "description",
-    purposeLabel: "Mô tả",
-    version: "v1.0",
-    updatedAt: "2026-10-15",
-    status: "Không hoạt động",
-    statusTone: "neutral",
-    thumbnail: "notes",
-    usageCount: 6,
-  },
-  {
-    id: "video-idea",
-    name: "Video Idea Generator",
-    description: "Đề xuất ý tưởng video dựa trên chủ đề và xu hướng hiện tại.",
-    purpose: "idea",
-    purposeLabel: "Ý tưởng",
-    version: "v1.0",
-    updatedAt: "2026-10-12",
-    status: "Đang dùng",
-    statusTone: "success",
-    thumbnail: "idea",
-    usageCount: 31,
-  },
-  {
-    id: "short-script",
-    name: "Short Script (TikTok/Shorts)",
-    description: "Tạo kịch bản ngắn, súc tích cho video ngắn.",
-    purpose: "script",
-    purposeLabel: "Script",
-    version: "v1.0",
-    updatedAt: "2026-10-10",
-    status: "Thử nghiệm",
-    statusTone: "warning",
-    thumbnail: "laptop",
-    usageCount: 12,
-  },
-]
-
-const categoryTabs: readonly TabItem<Category>[] = [
-  { value: "all", label: `Tất cả (${templates.length})` },
-  { value: "script", label: `Script (${templates.filter((item) => item.purpose === "script").length})` },
-  { value: "thumbnail", label: `Thumbnail (${templates.filter((item) => item.purpose === "thumbnail").length})` },
-  { value: "hook", label: `Hook (${templates.filter((item) => item.purpose === "hook").length})` },
-  { value: "description", label: `Mô tả (${templates.filter((item) => item.purpose === "description").length})` },
-  { value: "idea", label: `Ý tưởng (${templates.filter((item) => item.purpose === "idea").length})` },
-  { value: "other", label: "Khác (0)" },
-]
+type AuthoringState = { mode: AuthoringMode; templateId?: string }
 
 const detailTabs: readonly TabItem<DetailTab>[] = [
   { value: "overview", label: "Tổng quan" },
@@ -154,47 +58,6 @@ const detailTabs: readonly TabItem<DetailTab>[] = [
   { value: "history", label: "Lịch sử" },
 ]
 
-const variablesByPurpose: Record<Purpose, TemplateVariable[]> = {
-  script: [
-    { name: "{{topic}}", description: "Chủ đề chính của video" },
-    { name: "{{tone}}", description: "Giọng văn mong muốn" },
-    { name: "{{duration}}", description: "Độ dài mong muốn (phút)" },
-    { name: "{{key_points}}", description: "Các ý chính cần có" },
-  ],
-  thumbnail: [
-    { name: "{{topic}}", description: "Chủ đề chính của video" },
-    { name: "{{subject}}", description: "Chủ thể cần nhấn mạnh" },
-    { name: "{{mood}}", description: "Cảm xúc hình ảnh" },
-    { name: "{{colors}}", description: "Bảng màu mong muốn" },
-  ],
-  hook: [
-    { name: "{{topic}}", description: "Chủ đề chính của video" },
-    { name: "{{audience}}", description: "Khán giả mục tiêu" },
-    { name: "{{tone}}", description: "Giọng điệu của hook" },
-    { name: "{{count}}", description: "Số phương án cần tạo" },
-  ],
-  description: [
-    { name: "{{title}}", description: "Tiêu đề video" },
-    { name: "{{keywords}}", description: "Từ khóa SEO chính" },
-    { name: "{{chapters}}", description: "Danh sách timestamp" },
-    { name: "{{links}}", description: "Liên kết cần đính kèm" },
-  ],
-  idea: [
-    { name: "{{niche}}", description: "Chủ đề hoặc ngách nội dung" },
-    { name: "{{audience}}", description: "Khán giả mục tiêu" },
-    { name: "{{goal}}", description: "Mục tiêu của video" },
-    { name: "{{constraints}}", description: "Giới hạn hoặc yêu cầu riêng" },
-  ],
-}
-
-const purposeTone = {
-  script: "attention",
-  thumbnail: "lavender",
-  hook: "info",
-  description: "success",
-  idea: "danger",
-} as const
-
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
   month: "2-digit",
@@ -202,10 +65,7 @@ const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
 })
 
-const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
+const timeFormatter = new Intl.DateTimeFormat("vi-VN", {
   hour: "2-digit",
   minute: "2-digit",
   hour12: false,
@@ -214,19 +74,16 @@ const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
 
 const numberFormatter = new Intl.NumberFormat("vi-VN")
 
-function toDate(value: string, time = "12:00:00") {
-  return new Date(`${value}T${time}+07:00`)
-}
-
 function formatDate(value: string) {
-  return dateFormatter.format(toDate(value))
+  return dateFormatter.format(new Date(value))
 }
 
 function formatDateTime(value: string) {
-  return dateTimeFormatter.format(toDate(value, "14:30:00"))
+  const date = new Date(value)
+  return `${formatDate(value)} ${timeFormatter.format(date)}`
 }
 
-const templateColumns: readonly DataTableColumn<TemplateItem>[] = [
+const templateColumns: readonly DataTableColumn<TemplateRecord>[] = [
   {
     id: "name",
     header: "Template",
@@ -250,9 +107,9 @@ const templateColumns: readonly DataTableColumn<TemplateItem>[] = [
     id: "purpose",
     header: "Mục đích",
     width: "15%",
-    searchableValue: (template) => template.purposeLabel,
+    searchableValue: (template) => purposeLabels[template.purpose],
     cell: (template) => (
-      <Badge variant={purposeTone[template.purpose]}>{template.purposeLabel}</Badge>
+      <Badge variant={purposeTones[template.purpose]}>{purposeLabels[template.purpose]}</Badge>
     ),
   },
   {
@@ -261,7 +118,7 @@ const templateColumns: readonly DataTableColumn<TemplateItem>[] = [
     width: "11%",
     className: "px-2 text-xs font-medium tabular-nums text-muted-foreground",
     headerClassName: "px-2",
-    cell: (template) => template.version,
+    cell: (template) => getCurrentVersion(template).version,
   },
   {
     id: "updatedAt",
@@ -276,8 +133,13 @@ const templateColumns: readonly DataTableColumn<TemplateItem>[] = [
     id: "status",
     header: "Trạng thái",
     width: "15%",
-    searchableValue: (template) => template.status,
-    cell: (template) => <StatusBadge label={template.status} tone={template.statusTone} />,
+    searchableValue: (template) => statusPresentation[template.status].label,
+    cell: (template) => (
+      <StatusBadge
+        label={statusPresentation[template.status].label}
+        tone={statusPresentation[template.status].tone}
+      />
+    ),
   },
 ]
 
@@ -287,16 +149,12 @@ function getSearchParam(name: string, allowed: readonly string[], fallback: stri
 }
 
 function getInitialCategory(): Category {
-  return getSearchParam(
-    "category",
-    categoryTabs.map((item) => item.value),
-    "all",
-  ) as Category
+  return getSearchParam("category", ["all", ...Object.keys(purposeLabels)], "all") as Category
 }
 
 function getInitialTemplateId() {
   const templateId = new URLSearchParams(window.location.search).get("template")
-  return templates.some((template) => template.id === templateId) ? templateId! : templates[0]!.id
+  return initialTemplates.some((template) => template.id === templateId) ? templateId! : initialTemplates[0]!.id
 }
 
 function getInitialDetailTab(): DetailTab {
@@ -309,6 +167,21 @@ function getInitialDetailTab(): DetailTab {
 
 function getInitialDemoState(): DemoState {
   return getSearchParam("demo", ["ready", "empty", "loading", "error"], "ready") as DemoState
+}
+
+function getInitialAuthorDemoState(): AuthorDemoState {
+  return getSearchParam(
+    "authorState",
+    ["ready", "loading", "error", "save-error"],
+    "ready",
+  ) as AuthorDemoState
+}
+
+function getInitialAuthoringState(): AuthoringState | null {
+  const mode = new URLSearchParams(window.location.search).get("author")
+  if (mode === "create") return { mode: "create" }
+  if (mode === "edit") return { mode: "edit", templateId: getInitialTemplateId() }
+  return null
 }
 
 function getInitialSorting(): DataTableSorting {
@@ -354,17 +227,32 @@ function updateTemplateUrl(state: {
   window.history.replaceState(null, "", url)
 }
 
+function setAuthoringUrl(mode: AuthoringMode | null) {
+  const url = new URL(window.location.href)
+  if (mode) url.searchParams.set("author", mode)
+  else {
+    url.searchParams.delete("author")
+    url.searchParams.delete("authorState")
+    url.searchParams.delete("authorStep")
+    url.searchParams.delete("authorRail")
+  }
+  window.history.replaceState(null, "", url)
+}
+
 function TemplatesPage() {
+  const [templates, setTemplates] = useState<TemplateRecord[]>(() => initialTemplates)
   const [category, setCategory] = useState<Category>(getInitialCategory)
   const [selectedId, setSelectedId] = useState(getInitialTemplateId)
   const [detailTab, setDetailTab] = useState<DetailTab>(getInitialDetailTab)
   const [demoState, setDemoState] = useState<DemoState>(getInitialDemoState)
+  const [authoring, setAuthoring] = useState<AuthoringState | null>(getInitialAuthoringState)
+  const [saveNotice, setSaveNotice] = useState("")
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "")
   const [purpose, setPurpose] = useState(() =>
-    getSearchParam("purpose", ["all", "script", "hook", "thumbnail", "description", "idea"], "all"),
+    getSearchParam("purpose", ["all", ...Object.keys(purposeLabels)], "all"),
   )
   const [status, setStatus] = useState(() =>
-    getSearchParam("status", ["all", "success", "warning", "neutral"], "all"),
+    getSearchParam("status", ["all", "active", "experimental", "inactive"], "all"),
   )
   const [sorting, setSorting] = useState<DataTableSorting>(getInitialSorting)
 
@@ -373,11 +261,22 @@ function TemplatesPage() {
     [category, detailTab, purpose, query, selectedId, sorting, status],
   )
 
+  const categoryTabs = useMemo<readonly TabItem<Category>[]>(
+    () => [
+      { value: "all", label: `Tất cả (${templates.length})` },
+      ...(Object.entries(purposeLabels) as Array<[Purpose, string]>).map(([value, label]) => ({
+        value,
+        label: `${label} (${templates.filter((template) => template.purpose === value).length})`,
+      })),
+    ],
+    [templates],
+  )
+
   const filterTemplate = useCallback(
-    (template: TemplateItem) => {
+    (template: TemplateRecord) => {
       const matchesCategory = category === "all" || template.purpose === category
       const matchesPurpose = purpose === "all" || template.purpose === purpose
-      const matchesStatus = status === "all" || template.statusTone === status
+      const matchesStatus = status === "all" || template.status === status
       return matchesCategory && matchesPurpose && matchesStatus
     },
     [category, purpose, status],
@@ -388,11 +287,11 @@ function TemplatesPage() {
     return templates.filter((template) => {
       if (!filterTemplate(template)) return false
       if (!normalizedQuery) return true
-      return `${template.name} ${template.description} ${template.purposeLabel} ${template.status}`
+      return `${template.name} ${template.description} ${purposeLabels[template.purpose]} ${statusPresentation[template.status].label}`
         .toLocaleLowerCase("vi")
         .includes(normalizedQuery)
     })
-  }, [filterTemplate, query])
+  }, [filterTemplate, query, templates])
 
   useEffect(() => {
     if (matchingTemplates.length === 0) return
@@ -402,12 +301,57 @@ function TemplatesPage() {
   }, [matchingTemplates, selectedId])
 
   const selectedTemplate = templates.find((template) => template.id === selectedId) ?? templates[0]!
+  const editingTemplate =
+    authoring?.mode === "edit"
+      ? templates.find((template) => template.id === authoring.templateId) ?? selectedTemplate
+      : undefined
 
   function retryDemoState() {
     setDemoState("ready")
     const url = new URL(window.location.href)
     url.searchParams.delete("demo")
     window.history.replaceState(null, "", url)
+  }
+
+  function startAuthoring(mode: AuthoringMode, templateId?: string) {
+    setSaveNotice("")
+    setAuthoring({ mode, templateId })
+    setAuthoringUrl(mode)
+  }
+
+  function exitAuthoring() {
+    setAuthoring(null)
+    setAuthoringUrl(null)
+  }
+
+  function saveTemplate(template: TemplateRecord, message: string) {
+    setTemplates((current) => {
+      const exists = current.some((item) => item.id === template.id)
+      return exists
+        ? current.map((item) => (item.id === template.id ? template : item))
+        : [template, ...current]
+    })
+    setSelectedId(template.id)
+    setCategory("all")
+    setPurpose("all")
+    setStatus("all")
+    setDetailTab("overview")
+    setSaveNotice(message)
+    exitAuthoring()
+  }
+
+  if (authoring) {
+    return (
+      <TemplateAuthoringPage
+        key={`${authoring.mode}-${editingTemplate?.id ?? "new"}`}
+        mode={authoring.mode}
+        template={editingTemplate}
+        templates={templates}
+        initialDemoState={getInitialAuthorDemoState()}
+        onCancel={exitAuthoring}
+        onSave={saveTemplate}
+      />
+    )
   }
 
   return (
@@ -417,19 +361,22 @@ function TemplatesPage() {
           title="Templates"
           description="Quản lý các mẫu prompt để tạo nội dung nhanh và nhất quán cho kênh."
           action={
-            <Button
-              type="button"
-              variant="accent"
-              size="lg"
-              disabled
-              title="Sẽ được triển khai trong M2"
-              className="disabled:opacity-100"
-            >
+            <Button type="button" variant="accent" size="lg" onClick={() => startAuthoring("create")}>
               <Plus aria-hidden="true" />
               Tạo template mới
             </Button>
           }
         />
+
+        {saveNotice && (
+          <div role="status" className="mt-4 flex items-center gap-2 rounded-md border border-success/20 bg-success-soft px-3 py-2 text-xs text-success">
+            <CheckCircle2 aria-hidden="true" className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1">{saveNotice}</span>
+            <Button type="button" variant="ghost" size="icon-sm" aria-label="Đóng thông báo" onClick={() => setSaveNotice("")}>
+              <X aria-hidden="true" />
+            </Button>
+          </div>
+        )}
 
         <div className="mt-5 overflow-x-auto">
           <Tabs
@@ -441,12 +388,7 @@ function TemplatesPage() {
           />
         </div>
 
-        <section
-          id="templates-panel"
-          role="tabpanel"
-          aria-labelledby={`templates-panel-${category}-tab`}
-          className="mt-4"
-        >
+        <section id="templates-panel" role="tabpanel" aria-labelledby={`templates-panel-${category}-tab`} className="mt-4">
           <DataTable
             caption="Danh sách template nội dung"
             columns={templateColumns}
@@ -462,16 +404,8 @@ function TemplatesPage() {
             error={demoState === "error"}
             onRetry={retryDemoState}
             rowActions={(template) => (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                disabled
-                aria-label={`Mở thao tác cho ${template.name}`}
-                title="Thao tác template sẽ được triển khai trong M2"
-                className="disabled:opacity-100"
-              >
-                <MoreVertical aria-hidden="true" />
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={`Chỉnh sửa ${template.name}`} onClick={() => startAuthoring("edit", template.id)}>
+                <Pencil aria-hidden="true" />
               </Button>
             )}
             toolbar={
@@ -485,39 +419,17 @@ function TemplatesPage() {
                   className="min-w-52 flex-1"
                 />
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 lg:flex lg:shrink-0 xl:grid xl:grid-cols-3 2xl:flex">
-                  <Select
-                    label="Lọc theo mục đích"
-                    name="purpose-filter"
-                    value={purpose}
-                    onChange={(event) => setPurpose(event.target.value)}
-                    labelClassName="lg:w-36 xl:w-full 2xl:w-36"
-                  >
+                  <Select label="Lọc theo mục đích" name="purpose-filter" value={purpose} onChange={(event) => setPurpose(event.target.value)} labelClassName="lg:w-36 xl:w-full 2xl:w-36">
                     <option value="all">Mục đích</option>
-                    <option value="script">Script</option>
-                    <option value="hook">Hook</option>
-                    <option value="thumbnail">Thumbnail</option>
-                    <option value="description">Mô tả</option>
-                    <option value="idea">Ý tưởng</option>
+                    {purposeOptions().map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </Select>
-                  <Select
-                    label="Lọc theo trạng thái"
-                    name="status-filter"
-                    value={status}
-                    onChange={(event) => setStatus(event.target.value)}
-                    labelClassName="lg:w-40 xl:w-full 2xl:w-40"
-                  >
+                  <Select label="Lọc theo trạng thái" name="status-filter" value={status} onChange={(event) => setStatus(event.target.value)} labelClassName="lg:w-40 xl:w-full 2xl:w-40">
                     <option value="all">Trạng thái</option>
-                    <option value="success">Đang dùng</option>
-                    <option value="warning">Thử nghiệm</option>
-                    <option value="neutral">Không hoạt động</option>
+                    {(Object.entries(statusPresentation) as Array<[string, { label: string }]>).map(([value, presentation]) => (
+                      <option key={value} value={value}>{presentation.label}</option>
+                    ))}
                   </Select>
-                  <Select
-                    label="Sắp xếp template"
-                    name="template-sort"
-                    value={optionFromSorting(sorting)}
-                    onChange={(event) => setSorting(sortingFromOption(event.target.value as SortOption))}
-                    labelClassName="lg:w-36 xl:w-full 2xl:w-36"
-                  >
+                  <Select label="Sắp xếp template" name="template-sort" value={optionFromSorting(sorting)} onChange={(event) => setSorting(sortingFromOption(event.target.value as SortOption))} labelClassName="lg:w-36 xl:w-full 2xl:w-36">
                     <option value="updated-desc">Mới cập nhật</option>
                     <option value="updated-asc">Cũ nhất</option>
                     <option value="name-asc">Tên A–Z</option>
@@ -530,20 +442,19 @@ function TemplatesPage() {
         </section>
       </div>
 
-      <TemplateDetail template={selectedTemplate} tab={detailTab} onTabChange={setDetailTab} />
+      <TemplateDetail
+        template={selectedTemplate}
+        tab={detailTab}
+        onTabChange={setDetailTab}
+        onEdit={() => startAuthoring("edit", selectedTemplate.id)}
+      />
     </div>
   )
 }
 
-function TemplateDetail({
-  template,
-  tab,
-  onTabChange,
-}: {
-  template: TemplateItem
-  tab: DetailTab
-  onTabChange: (tab: DetailTab) => void
-}) {
+function TemplateDetail({ template, tab, onTabChange, onEdit }: { template: TemplateRecord; tab: DetailTab; onTabChange: (tab: DetailTab) => void; onEdit: () => void }) {
+  const currentVersion = getCurrentVersion(template)
+  const status = statusPresentation[template.status]
   return (
     <DetailPanel aria-label={`Chi tiết ${template.name}`}>
       <DetailPanelHeader>
@@ -551,45 +462,25 @@ function TemplateDetail({
           <TemplateThumbnail kind={template.thumbnail} className="size-14" />
           <div className="min-w-0 flex-1">
             <div className="flex items-start gap-2">
-              <h2 className="min-w-0 flex-1 text-sm font-bold leading-5 text-primary text-pretty">
-                {template.name}
-              </h2>
-              <StatusBadge label={template.status} tone={template.statusTone} />
+              <h2 className="min-w-0 flex-1 text-sm font-bold leading-5 text-primary text-pretty">{template.name}</h2>
+              <StatusBadge label={status.label} tone={status.tone} />
             </div>
             <p className="mt-1 text-xs tabular-nums text-muted-foreground">
-              {template.version} <span className="px-1.5 text-border-strong">•</span> Cập nhật {formatDate(template.updatedAt)}
+              {currentVersion.version} <span className="px-1.5 text-border-strong">•</span> Cập nhật {formatDate(template.updatedAt)}
             </p>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            disabled
-            aria-label={`Mở thao tác cho ${template.name}`}
-            title="Thao tác template sẽ được triển khai trong M2"
-            className="disabled:opacity-100"
-          >
-            <MoreVertical aria-hidden="true" />
+          <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+            <Pencil aria-hidden="true" />
+            Chỉnh sửa
           </Button>
         </div>
       </DetailPanelHeader>
 
       <div className="overflow-x-auto px-5">
-        <Tabs
-          items={detailTabs}
-          value={tab}
-          onValueChange={onTabChange}
-          ariaLabel="Nội dung chi tiết template"
-          panelId="template-detail-panel"
-          className="justify-between gap-0"
-        />
+        <Tabs items={detailTabs} value={tab} onValueChange={onTabChange} ariaLabel="Nội dung chi tiết template" panelId="template-detail-panel" className="justify-between gap-0" />
       </div>
 
-      <div
-        id="template-detail-panel"
-        role="tabpanel"
-        aria-labelledby={`template-detail-panel-${tab}-tab`}
-      >
+      <div id="template-detail-panel" role="tabpanel" aria-labelledby={`template-detail-panel-${tab}-tab`}>
         {tab === "overview" && <TemplateOverview template={template} />}
         {tab === "content" && <TemplateContent template={template} />}
         {tab === "variables" && <TemplateVariables template={template} />}
@@ -599,111 +490,66 @@ function TemplateDetail({
   )
 }
 
-function TemplateOverview({ template }: { template: TemplateItem }) {
+function TemplateOverview({ template }: { template: TemplateRecord }) {
+  const currentVersion = getCurrentVersion(template)
+  const status = statusPresentation[template.status]
   return (
     <>
       <DetailSection title="Mô tả">
-        <p className="text-xs leading-5 text-muted-foreground text-pretty">
-          {template.description} Nội dung được giữ ngắn gọn, dễ rà soát và phù hợp với phong cách của{" "}
-          <span translate="no">Ngộ Dậy Studio</span>.
-        </p>
+        <p className="text-xs leading-5 text-muted-foreground text-pretty">{template.description}</p>
       </DetailSection>
-
       <DetailDivider />
       <DetailSection title="Thông tin">
         <dl className="space-y-2.5">
-          <DetailInfoRow icon={Layers3} label="Mục đích">
-            <Badge variant={purposeTone[template.purpose]}>{template.purposeLabel}</Badge>
-          </DetailInfoRow>
-          <DetailInfoRow icon={CircleDot} label="Trạng thái">
-            <StatusBadge label={template.status} tone={template.statusTone} />
-          </DetailInfoRow>
-          <DetailInfoRow icon={Info} label="Phiên bản hiện tại">
-            <span className="font-medium tabular-nums text-foreground">{template.version}</span>
-          </DetailInfoRow>
-          <DetailInfoRow icon={CalendarClock} label="Cập nhật">
-            <time className="tabular-nums" dateTime={`${template.updatedAt}T14:30:00+07:00`}>
-              {formatDateTime(template.updatedAt)}
-            </time>
-          </DetailInfoRow>
-          <DetailInfoRow icon={UserRound} label="Người tạo">
-            Bạn
-          </DetailInfoRow>
-          <DetailInfoRow icon={ChartNoAxesColumnIncreasing} label="Lượt sử dụng">
-            <span className="tabular-nums">{numberFormatter.format(template.usageCount)} lần</span>
-          </DetailInfoRow>
+          <DetailInfoRow icon={Layers3} label="Mục đích"><Badge variant={purposeTones[template.purpose]}>{purposeLabels[template.purpose]}</Badge></DetailInfoRow>
+          <DetailInfoRow icon={CircleDot} label="Trạng thái"><StatusBadge label={status.label} tone={status.tone} /></DetailInfoRow>
+          <DetailInfoRow icon={Info} label="Phiên bản hiện tại"><span className="font-medium tabular-nums text-foreground">{currentVersion.version}</span></DetailInfoRow>
+          <DetailInfoRow icon={CalendarClock} label="Cập nhật"><time className="tabular-nums" dateTime={template.updatedAt}>{formatDateTime(template.updatedAt)}</time></DetailInfoRow>
+          <DetailInfoRow icon={UserRound} label="Người tạo">{template.createdBy}</DetailInfoRow>
+          <DetailInfoRow icon={ChartNoAxesColumnIncreasing} label="Lượt sử dụng"><span className="tabular-nums">{numberFormatter.format(template.usageCount)} lần</span></DetailInfoRow>
         </dl>
       </DetailSection>
-
       <DetailDivider />
-      <DetailSection title="Biến sử dụng">
-        <VariableList variables={variablesByPurpose[template.purpose]} />
-      </DetailSection>
+      <DetailSection title="Biến sử dụng"><VariableList variables={currentVersion.variables} /></DetailSection>
     </>
   )
 }
 
-function TemplateContent({ template }: { template: TemplateItem }) {
-  const variables = variablesByPurpose[template.purpose]
+function TemplateContent({ template }: { template: TemplateRecord }) {
+  const currentVersion = getCurrentVersion(template)
   return (
-    <DetailSection title="Nội dung prompt">
-      <pre className="max-h-[calc(100vh-13rem)] overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/45 p-3 font-sans text-xs leading-5 text-muted-foreground">
-        {`Bạn là một biên tập viên nội dung chuyên nghiệp.
-
-Hãy tạo ${template.purposeLabel.toLocaleLowerCase("vi")} cho chủ đề ${variables[0]?.name ?? "{{topic}}"}.
-
-Yêu cầu:
-- Nội dung rõ ràng, tự nhiên và dễ chỉnh sửa.
-- Giữ đúng mục tiêu của template “${template.name}”.
-- Sử dụng đầy đủ các biến được cung cấp.`}
-      </pre>
+    <DetailSection title={`Nội dung prompt · ${currentVersion.version}`}>
+      <pre className="max-h-[calc(100vh-13rem)] overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/45 p-3 font-sans text-xs leading-5 text-muted-foreground">{currentVersion.content}</pre>
     </DetailSection>
   )
 }
 
-function TemplateVariables({ template }: { template: TemplateItem }) {
+function TemplateVariables({ template }: { template: TemplateRecord }) {
+  const variables = getCurrentVersion(template).variables
   return (
-    <DetailSection title={`${variablesByPurpose[template.purpose].length} biến đang dùng`}>
-      <VariableList variables={variablesByPurpose[template.purpose]} />
+    <DetailSection title={`${variables.length} biến đang dùng`}>
+      <VariableList variables={variables} />
       <p className="mt-3 flex items-start gap-2 text-[11px] leading-4 text-muted-foreground">
         <Info aria-hidden="true" className="mt-px size-3.5 shrink-0" />
-        Đây là dữ liệu mock để duyệt cấu trúc browse; chỉnh sửa biến thuộc phạm vi M2.
+        Biến được validate trước khi render và được lưu cùng snapshot phiên bản.
       </p>
     </DetailSection>
   )
 }
 
-function TemplateHistory({ template }: { template: TemplateItem }) {
+function TemplateHistory({ template }: { template: TemplateRecord }) {
   return (
     <DetailSection title="Lịch sử phiên bản">
       <ol className="space-y-4">
-        <HistoryItem
-          active
-          version={template.version}
-          note="Cập nhật cấu trúc và tinh chỉnh nội dung prompt."
-          date={formatDateTime(template.updatedAt)}
-          dateTime={`${template.updatedAt}T14:30:00+07:00`}
-        />
-        <HistoryItem
-          version="v1.0"
-          note="Tạo phiên bản đầu tiên."
-          date={dateFormatter.format(toDate("2026-10-05"))}
-          dateTime="2026-10-05T09:20:00+07:00"
-        />
+        {template.versions.map((version, index) => (
+          <HistoryItem key={version.version} active={index === 0} version={version.version} note={version.changeNote} date={formatDateTime(version.createdAt)} dateTime={version.createdAt} />
+        ))}
       </ol>
     </DetailSection>
   )
 }
 
-function DetailInfoRow({
-  icon: Icon,
-  label,
-  children,
-}: {
-  icon: LucideIcon
-  label: string
-  children: ReactNode
-}) {
+function DetailInfoRow({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[16px_132px_minmax(0,1fr)] items-center gap-2 text-xs text-muted-foreground">
       <Icon aria-hidden="true" className="size-3.5 text-info" />
@@ -713,49 +559,35 @@ function DetailInfoRow({
   )
 }
 
-function VariableList({ variables }: { variables: TemplateVariable[] }) {
+function VariableList({ variables }: { variables: TemplateVariableDefinition[] }) {
+  if (variables.length === 0) return <p className="text-xs text-muted-foreground">Template này không dùng biến.</p>
   return (
     <div className="overflow-hidden rounded-md border border-border">
       {variables.map((variable) => (
-        <div
-          key={variable.name}
-          className="grid grid-cols-[132px_minmax(0,1fr)] gap-3 border-b border-border px-3 py-2 text-xs last:border-b-0"
-        >
-          <code translate="no" className="w-fit rounded bg-accent-soft px-1.5 py-0.5 font-mono text-accent-strong">
-            {variable.name}
-          </code>
-          <span className="break-words text-muted-foreground">{variable.description}</span>
+        <div key={variable.id} className="grid grid-cols-[132px_minmax(0,1fr)] gap-3 border-b border-border px-3 py-2 text-xs last:border-b-0">
+          <code translate="no" className="w-fit rounded bg-accent-soft px-1.5 py-0.5 font-mono text-accent-strong">{`{{${variable.name}}}`}</code>
+          <span className="break-words text-muted-foreground">{variable.label}</span>
         </div>
       ))}
     </div>
   )
 }
 
-function HistoryItem({
-  active = false,
-  version,
-  note,
-  date,
-  dateTime,
-}: {
-  active?: boolean
-  version: string
-  note: string
-  date: string
-  dateTime: string
-}) {
+function HistoryItem({ active = false, version, note, date, dateTime }: { active?: boolean; version: string; note: string; date: string; dateTime: string }) {
   return (
     <li className="grid grid-cols-[12px_38px_minmax(0,1fr)] items-start gap-2 text-[11px]">
       <span aria-hidden="true" className={`mt-1 size-2 rounded-full ${active ? "bg-success" : "bg-border-strong"}`} />
       <strong className="text-primary">{version}</strong>
       <span className="min-w-0">
         <span className="block text-muted-foreground text-pretty">{note}</span>
-        <time className="mt-1 block tabular-nums text-muted-foreground" dateTime={dateTime}>
-          {date} · Bạn
-        </time>
+        <time className="mt-1 block tabular-nums text-muted-foreground" dateTime={dateTime}>{date} · Bạn</time>
       </span>
     </li>
   )
+}
+
+function purposeOptions() {
+  return Object.entries(purposeLabels) as Array<[Purpose, string]>
 }
 
 export { TemplatesPage }

@@ -17,7 +17,19 @@ M1 dùng query parameter chỉ dành cho review để tái hiện các state c�
 - Loading: `/?demo=loading#templates`
 - Error + retry: `/?demo=error#templates`
 
-Detail panel là read-only trong M1. Tab đang mở được phản ánh bằng `detail=overview|content|variables|history`. Nút tạo mới, chỉnh sửa và business action thuộc M2; M1 không ghi dữ liệu và không gọi IPC nghiệp vụ.
+Detail panel là read-only trong baseline M1. Tab đang mở được phản ánh bằng `detail=overview|content|variables|history`. M2 kích hoạt tạo/chỉnh sửa bằng state in-memory nhưng vẫn không ghi dữ liệu qua restart và không gọi IPC nghiệp vụ.
+
+## M2 review routes
+
+M2 tiếp tục dùng query parameter chỉ dành cho review, không hiển thị debug control trong sản phẩm:
+
+- Create: `/?author=create#templates`
+- Edit: `/?author=edit&template=youtube-long-form#templates`
+- Authoring loading: `/?author=create&authorState=loading#templates`
+- Authoring load error + retry: `/?author=create&authorState=error#templates`
+- Mock save error giữ nguyên draft + retry: `/?author=edit&template=youtube-long-form&authorState=save-error#templates`
+
+Stepper và rail được phản ánh bằng `authorStep=1|2|3` và `authorRail=history`. Preview values chỉ tồn tại trong phiên editor và không đưa lên URL.
 
 ## Tokens
 

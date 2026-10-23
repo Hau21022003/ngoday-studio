@@ -8,11 +8,14 @@ type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
   labelClassName?: string
 }
 
-function Select({ className, label, labelClassName, children, ...props }: SelectProps) {
+function Select({ className, label, labelClassName, children, id, name, autoComplete = "off", ...props }: SelectProps) {
   return (
     <label className={cn("relative block", labelClassName)}>
       <span className="sr-only">{label}</span>
       <select
+        id={id}
+        name={name ?? id}
+        autoComplete={autoComplete}
         aria-label={label}
         className={cn(
           "h-control w-full appearance-none rounded-md border border-input bg-surface py-0 pl-3 pr-9 text-sm text-foreground shadow-[0_1px_1px_rgb(20_42_74/0.02)] transition-[border-color,box-shadow] duration-150 focus:border-primary/45 focus:outline-none focus:ring-2 focus:ring-ring/15 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60",

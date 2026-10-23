@@ -41,7 +41,8 @@ Tạo một workflow local đáng tin cậy cho Episode, prompt, script, scene v
 - Implementation mới của Phase 1 bắt đầu từ baseline đã chốt trong repository này.
 - Mọi implementation Phase 1 cũ hoặc thử nghiệm không phải baseline và không bắt buộc reuse. Chỉ tham khảo hoặc tái sử dụng phần phù hợp sau khi được đánh giá chủ động theo milestone đang thực hiện.
 - **M1 — Approved/Completed ngày 2026-10-23.** Visual direction, density, responsive behavior và browse/detail structure của Templates đã được người dùng duyệt và trở thành baseline cho các milestone sau.
-- M2–M8 ở trạng thái planned. M2 chưa bắt đầu và chỉ được triển khai khi có yêu cầu tiếp theo từ người dùng.
+- **M2 — Implementation complete, awaiting review ngày 2026-10-23.** UX contract đã duyệt; prototype mock/in-memory đã bao phủ create/edit, variable validation, rendered preview/copy, immutable version history, unsaved confirm và error recovery. M2 chưa được đánh dấu approved/completed cho đến khi người dùng review.
+- M3–M8 ở trạng thái planned; không bắt đầu M3 trước khi M2 được implement và duyệt tại điểm dừng review.
 - Không có milestone database/persistence nào được phép bắt đầu trước khi M4 qua điểm dừng review.
 
 ### M1 — UI Foundation + Templates Browse
@@ -67,6 +68,8 @@ Tạo một workflow local đáng tin cậy cho Episode, prompt, script, scene v
 Người dùng duyệt visual direction, density, token, component, app shell, responsive behavior và cấu trúc browse/detail của Templates. Không bắt đầu Template Editor trước khi M1 được duyệt.
 
 ### M2 — Template Authoring Prototype
+
+**UX contract đã duyệt:** `07-m2-template-authoring-contract.md`. M2 dùng mock/in-memory state và phải dừng tại điểm review trước M3.
 
 **Phạm vi**
 
