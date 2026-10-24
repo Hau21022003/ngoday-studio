@@ -88,17 +88,17 @@ Quy tắc vận hành:
 Quy ước đề xuất:
 
 ```text
-scene-{sceneOrder:02}-{assetOrder:02}
+scene-{canonicalNo:02}-{slotOrder:02}
 ```
 
 Trong đó:
 
-- `sceneOrder` là thứ tự scene trong Episode.
-- `assetOrder` là thứ tự asset logic trong scene, không phải số lần retry.
+- `canonicalNo` là số ổn định được cấp khi tạo Scene; reorder chỉ đổi `displayOrder`, không đổi số này.
+- `slotOrder` là thứ tự AssetSlot trong Scene, không phải số lần retry/version.
 - Phần mở rộng do loại file quyết định sau khi download, ví dụ `scene-01-01.mp4` hoặc `scene-01-02.png`.
 - `attemptNo` và version không nằm trong tên canonical; chúng được quản lý trong database và manifest.
 
-Nếu một asset canonical được tạo lại, candidate cũ vẫn được giữ trong lịch sử. Chỉ một media version được đánh dấu `accepted` cho mỗi asset slot. Cách xử lý tên candidate/rejected ngay trong Flow cần được chốt sau PoC vì Flow có thể không cho phép hai asset cùng tên hoặc có thể đổi tên qua Agent thay vì một trường nhập trực tiếp.
+Nếu một asset canonical được tạo lại, candidate cũ vẫn được giữ trong lịch sử. Chỉ một Asset active được đánh dấu `accepted` cho mỗi AssetSlot. Cách xử lý tên candidate/rejected ngay trong Flow cần được chốt sau PoC vì Flow có thể không cho phép hai asset cùng tên hoặc có thể đổi tên qua Agent thay vì một trường nhập trực tiếp.
 
 ### 3.5. Pause, resume và retry
 
@@ -147,9 +147,10 @@ CapCut vẫn được thao tác thủ công. Export không chỉnh sửa hay t�
 
 | Đối tượng | Trạng thái đề xuất |
 | --- | --- |
-| Episode | `draft`, `scenes_ready`, `producing`, `ready_to_export`, `archived` |
+| Episode | workflow projection `draft`, `scenes_ready`, `producing`, `ready_to_export`; archive từ `archivedAt` |
 | Scene | `draft`, `in_review`, `approved`, `needs_changes` |
-| Asset slot | `draft`, `queued`, `generating`, `review`, `accepted`, `downloaded`, `failed` |
+| Asset slot | `draft`, `ready`, `fulfilled` |
+| Asset | lifecycle `candidate`, `accepted`, `rejected`; file integrity derive riêng |
 | Job | `queued`, `running`, `retry_wait`, `waiting_user`, `paused`, `succeeded`, `failed`, `cancelled` |
 | Generation attempt | `prepared`, `submitted`, `generating`, `ready`, `rejected`, `accepted`, `unknown`, `failed` |
 

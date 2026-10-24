@@ -32,7 +32,7 @@ Tạo một workflow local đáng tin cậy theo chuỗi `Episode → Scenes →
 | M2 — Template Authoring Prototype | Luồng tạo/sửa/preview/version template | Mock/in-memory | M1 được duyệt |
 | M3 — Episodes & Workspace Prototype | Information architecture và luồng quản lý Episode | Mock/in-memory | M1–M2 được duyệt |
 | M4 — Scenes & Assets Prototype | Workflow tạo/import/review Scenes và lập kế hoạch Assets ở mức UI | Mock/in-memory | M1–M3 được duyệt |
-| M5 — Domain Contract & Persistence Foundation | Data model, migration, repository và IPC contract | SQLite/test fixtures | M1–M4 được duyệt |
+| M5 — Domain Contract & Persistence Foundation | Data model, migration, repository và IPC contract | Contract trước; SQLite/test fixtures sau review | M1–M4 được duyệt |
 | M6 — Templates & Episodes Vertical Slice | Template và Episode hoạt động bền vững sau restart | Persisted | M5 được duyệt |
 | M7 — Scenes Vertical Slice | Render/copy Scene Template, import JSON, edit, reorder và approval | Persisted | M6 được duyệt |
 | M8 — Asset Planning & Phase 1 Hardening | Asset slot, backup/restore và kiểm thử end-to-end | Persisted | M7 được duyệt |
@@ -42,9 +42,12 @@ Tạo một workflow local đáng tin cậy theo chuỗi `Episode → Scenes →
 - Implementation mới của Phase 1 bắt đầu từ baseline đã chốt trong repository này.
 - Mọi implementation Phase 1 cũ hoặc thử nghiệm không phải baseline và không bắt buộc reuse. Chỉ tham khảo hoặc tái sử dụng phần phù hợp sau khi được đánh giá chủ động theo milestone đang thực hiện.
 - **M1 — Approved/Completed ngày 2026-10-23.** Visual direction, density, responsive behavior và browse/detail structure của Templates đã được người dùng duyệt và trở thành baseline cho các milestone sau.
-- **M2 — Implemented.** Prototype mock/in-memory đã bao phủ create/edit, variable validation, review metadata + sample values, rendered preview/copy, immutable version history, unsaved confirm và error recovery. Contract mục đích template được điều chỉnh từ `script` sang `scene` theo workflow mới; UI hiện hành sẽ được đồng bộ trong bước implementation sau.
-- **M3 — Implemented theo plan cũ, cần alignment trước review.** Episode list, Create/Edit và Workspace Overview đã có mock/in-memory. Tab `Script` còn tồn tại trong code hiện hành nhưng bị loại khỏi target contract; lượt này chỉ cập nhật tài liệu, chưa sửa UI.
-- M4–M8 ở trạng thái planned.
+- **M2 — Approved/Completed.** Prototype mock/in-memory bao phủ create/edit, variable validation, review metadata + sample values, rendered preview/copy, immutable version history, unsaved confirm và error recovery. Purpose `scene` là contract chuẩn; enum mock legacy sẽ được đồng bộ khi nối persistence.
+- **M3 — Approved/Completed.** Episode list, Create/Edit, Workspace Overview và navigation `Overview / Scenes / Assets` đã có mock/in-memory; tab/quick action Script đã bị loại bỏ.
+- **M4 — Approved làm input cho M5.** Scenes và Assets prototype đã có search/filter/sort, create/import JSON, review/edit/reorder/approve, asset grid/detail và các action mock. Các state/invariant hardening còn lại được chốt bằng M5 contract và triển khai tại M7–M8.
+- **M5A — Approved ngày 2026-10-24.** Domain/schema/migration/repository/typed IPC baseline nằm tại `08-m5-domain-persistence-contract.md`.
+- **M5B — Approved/Completed ngày 2026-10-24.** Persistence foundation đã có migration `0001`, startup/checksum guard, backup safety, repository/service boundary, shared validation, typed preload/IPC và test/package evidence. Checkpoint review PASS sau khi chạy lại `npm run verify` và `npm run package:verify`; UI M1–M4 vẫn dùng mock/in-memory đúng phạm vi.
+- M6–M8 ở trạng thái planned.
 - Không có milestone database/persistence nào được phép bắt đầu trước khi M4 qua điểm dừng review.
 
 ### M1 — UI Foundation + Templates Browse
@@ -141,10 +144,34 @@ Người dùng duyệt toàn bộ Phase 1 workflow, naming convention, JSON Scen
 
 **Điều kiện bắt đầu:** M1–M4 đã được duyệt và các câu hỏi nghiệp vụ ảnh hưởng schema đã có quyết định ghi trong `05-decisions.md`.
 
+**Approved contract:** `08-m5-domain-persistence-contract.md`.
+
+M5 có hai checkpoint tuần tự:
+
+1. **M5A — Contract review (Approved):** entity/relationship, enum, JSON Scenes v1, DDL, migration strategy, repository và typed IPC đã được duyệt.
+2. **M5B — Persistence foundation implementation (Approved/Completed):** đã tạo shared validation schema, migration runner, SQLite adapter, repository/application services, typed preload/IPC và test fixtures; checkpoint review PASS ngày 2026-10-24.
+
+**Kế hoạch M5B đã triển khai**
+
+1. **SQLite migrations:** dùng `node:sqlite` đi kèm Electron 45/Node 24; tạo `0001_phase1_core.sql` đúng DDL Approved, không seed production.
+2. **Migration runner:** startup owner ở main process, `foreign_keys/WAL/busy_timeout`, checksum, `BEGIN IMMEDIATE`, fail-fast trước khi register business IPC.
+3. **Repositories:** implement mapper + repository cho Template/Version, Episode, Scene/import provenance, AssetSlot và Asset; không trả raw row hoặc generic SQL.
+4. **Typed IPC:** shared request/response schemas, preload API allowlist và error mapping; renderer không nhận Node/SQLite/filesystem capability.
+5. **Optimistic concurrency:** mọi update current-state dùng `WHERE revision_no = expectedRevisionNo`; zero-row update trả `STALE_REVISION`.
+6. **Import transaction:** preview strict JSON/code-fence normalization; commit revalidate hashes/revision rồi ghi batch + Scenes + Slots atomically cho append/replace.
+7. **Backup/migration safety:** checkpoint WAL và backup database có version trước migration trên DB đã có dữ liệu; không down migration, không xóa backup tự động.
+8. **Tests:** unit validation/policy, repository constraint/concurrency, migration empty/N-1/rollback/checksum, import append/replace/conflict/atomicity, IPC trust boundary và packaged Windows smoke test.
+
+Không nối UI M1–M4 vào database trong M5B. M5B đã dừng đúng checkpoint và được duyệt sau khi review migration, test report và package evidence.
+
+**Implementation evidence:** xem `09-m5b-persistence-foundation.md`. `npm run verify` bao phủ unit/integration/migration/import/IPC; `npm run package:verify` build bản Windows unpacked rồi khởi chạy chính executable đóng gói để tạo database, kiểm tra migration version và `PRAGMA integrity_check`.
+
 **Phạm vi**
 
-- Chốt domain types và validation schema cho Episode, template/version, Scene, JSON Scenes import, character reference metadata và asset slot.
+- Chốt domain types và validation schema cho Episode, template/version, Scene, JSON Scenes import và AssetSlot/Asset. Character reference chưa có UI/use case M1–M4 nên deferred khỏi migration đầu.
 - Xác nhận schema không có `scripts`, `script_revisions` hoặc quan hệ Script → Scene; `Nội dung nguồn` chỉ là input tạm của renderer/application flow.
+- Tách `AssetSlot` là logical output và `Asset` là candidate/file; tối đa một Asset accepted trong mỗi slot.
+- Tách Scene `display_order` khỏi `canonical_no` ổn định để reorder không tự đổi canonical asset name.
 - Thiết kế SQLite migrations, repository boundary, transaction rules và typed IPC qua preload.
 - Tạo test fixtures tương ứng với mock đã được duyệt; không tự ý thêm field chỉ vì thuận tiện cho database.
 - Spike sớm native SQLite packaging trên Windows; ưu tiên migration failure handling, transaction safety và backup trước migration quan trọng.
@@ -152,8 +179,11 @@ Người dùng duyệt toàn bộ Phase 1 workflow, naming convention, JSON Scen
 
 **Acceptance criteria**
 
+- M5A Approved truy vết field M1–M4 sang domain field, table, validation và IPC command; thay đổi contract sau approval phải quay lại decision log.
 - Data model truy vết được về field và workflow đã duyệt ở M1–M4.
-- ER/data model chỉ thể hiện `Episode → Scene → Asset slot`; narration thuộc Scene và không có bảng Script/revision.
+- ER/data model giữ business chain `Episode → Scene → AssetSlot → Asset`, thêm `SceneImportBatch` tối thiểu để truy provenance TemplateVersion; narration thuộc Scene và không có bảng Script/revision.
+- JSON Scenes có version, strict validation, payload preview/hash và transaction rule rõ; GPT không thể import trạng thái approved.
+- Mutation Template/Episode/Scene/AssetSlot/Asset dùng optimistic concurrency; version/provenance snapshot không bị update đè.
 - Migration chạy được trên database trống và database ở version trước, có version rõ ràng.
 - Migration lỗi hoặc bị gián đoạn không để lại schema/data nửa chừng, trả lỗi có thể chẩn đoán và giữ được đường phục hồi an toàn bằng transaction/backup; không yêu cầu rollback framework tổng quát.
 - Renderer không truy cập Node/SQLite trực tiếp; IPC validation chặn payload sai.
@@ -162,7 +192,7 @@ Người dùng duyệt toàn bộ Phase 1 workflow, naming convention, JSON Scen
 
 **Điểm dừng review**
 
-Người dùng duyệt ER/data model, migration strategy, IPC surface và backup boundary. Chưa nối page sản phẩm với database trước khi M5 được duyệt.
+M5A và M5B đã qua điểm dừng review; toàn bộ M5 được duyệt ngày 2026-10-24. Chưa nối page sản phẩm với database. M6 chỉ bắt đầu triển khai sau khi kế hoạch chi tiết M6 được duyệt.
 
 ### M6 — Templates & Episodes Vertical Slice
 
@@ -192,14 +222,14 @@ Người dùng kiểm tra một vertical slice bằng dữ liệu thật và duy
 - Paste hoặc chọn file JSON Scenes theo schema đã duyệt; validate toàn payload và import trong một transaction.
 - Persist Scene CRUD, narration/voice-over, media prompts, reorder và approval validation.
 - Không persist `Nội dung nguồn`, rendered prompt, raw ChatGPT response hay Script revision như object riêng trong Phase 1.
-- Reorder hiển thị preview/confirm khi canonical naming bị ảnh hưởng.
+- Reorder chỉ cập nhật `display_order`; `canonical_no` và canonical asset name giữ ổn định. Preview phải cho thấy rõ mapping không đổi.
 
 **Acceptance criteria**
 
 - Rendered prompt dùng đúng Episode data, Scene Template version và chỉ chèn `Nội dung nguồn` khi người dùng cung cấp.
 - JSON hợp lệ tạo đúng Scene theo thứ tự và gán narration/voice-over vào đúng Scene; import lỗi không ghi dữ liệu nửa chừng.
 - Scene đã lưu còn nguyên sau close/reopen; save error giữ input để người dùng thử lại.
-- Reorder cập nhật order/naming preview nhất quán và yêu cầu xác nhận khi có ảnh hưởng mapping.
+- Reorder cập nhật display order nhất quán và giữ nguyên canonical mapping. Phase 1 không expose xóa riêng Scene; replace asset-free được reset numbering theo contract.
 - Scene chỉ chuyển `approved` khi các trường bắt buộc hợp lệ.
 - Không có table/repository/IPC/UI state dành cho Script hoặc script revision.
 
@@ -211,8 +241,8 @@ Người dùng duyệt flow bằng một fixture JSON Scenes thực tế đã �
 
 **Phạm vi**
 
-- Persist asset slot, media type, prompt, character reference metadata và canonical name.
-- Thêm validation duplicate/missing data và constraint canonical name duy nhất trong Episode.
+- Persist asset slot, Asset candidate/file, media type, prompt và canonical name; character reference tiếp tục deferred đến khi có UI/use case được duyệt.
+- Thêm validation duplicate, file-integrity `missing/hash_mismatch` dạng projection và constraint canonical name duy nhất trong Episode.
 - Hoàn thiện export/import backup metadata, Scenes và narration; chưa gồm browser profile hay binary media.
 - Chạy regression, backup/restore và end-to-end test cho toàn bộ Phase 1; cập nhật tài liệu/sample fixtures.
 
@@ -250,7 +280,7 @@ Người dùng chạy pilot một Episode, duyệt kết quả restore và test 
 - Tạo Template version mới không làm thay đổi snapshot cũ đã lưu.
 - Scene Template render đúng metadata Episode và `Nội dung nguồn` tùy chọn; prompt có thể copy để dùng với ChatGPT thủ công.
 - Import JSON Scenes hợp lệ tạo đúng Scene/narration theo thứ tự; import lỗi không ghi dữ liệu nửa chừng.
-- Reorder scene cập nhật lại canonical name có preview và yêu cầu xác nhận nếu có nguy cơ ảnh hưởng mapping.
+- Reorder scene chỉ đổi display order; canonical name giữ ổn định và preview phải thể hiện mapping trước khi lưu.
 - Scene chỉ chuyển `approved` khi các trường bắt buộc hợp lệ.
 - Mỗi asset slot trong Episode có canonical name duy nhất.
 - Scene đã lưu không mất nội dung khi đóng/mở lại app trong kịch bản test.

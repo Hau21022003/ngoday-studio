@@ -73,6 +73,8 @@ Không lưu Google password. Cookie/session chỉ tồn tại trong profile brow
 
 SQLite giữ metadata, quan hệ, queue và audit. Binary media nằm trên filesystem; database chỉ lưu path, size, MIME, hash và trạng thái.
 
+Contract Phase 1 cụ thể cho entity, DDL, migration, repository và IPC nằm tại `08-m5-domain-persistence-contract.md`. Nếu phần mô tả định hướng bên dưới khác contract M5, tài liệu M5 là nguồn chuẩn cho schema Phase 1; các field Flow/queue/generation chỉ được thêm bằng migration ở Phase 2.
+
 Thiết lập đề xuất:
 
 - Foreign key bật.
@@ -82,34 +84,33 @@ Thiết lập đề xuất:
 - Path chuẩn hóa theo Windows nhưng manifest export dùng dấu `/` tương đối để dễ di chuyển.
 - Hash SHA-256 cho media đã download và export.
 
-## 4. Data model
+## 4. Data model tổng thể
 
-Tên trường dưới đây là logical schema; kiểu và migration cụ thể chỉ được chốt khi implement.
+Core Phase 1 chỉ gồm `prompt_templates`, `prompt_template_versions`, `episodes`, `scene_import_batches`, `scenes`, `asset_slots` và `assets`. Không tạo sẵn table cho automation chưa được duyệt. Các subsection về Flow/queue/export bên dưới là hướng mở rộng Phase 2–3, không thuộc migration `0001_phase1_core`.
 
-### `episodes`
+### `episodes` và extension sau Phase 1
 
 | Trường | Ý nghĩa |
 | --- | --- |
 | `id` | UUID local ổn định |
 | `title`, `topic`, `slug` | Thông tin Episode |
-| `status` | Trạng thái nghiệp vụ |
-| `flow_project_id` | ID nếu quan sát được ổn định; nullable |
-| `flow_project_url` | URL project để mở lại |
-| `flow_project_name` | Tên đã xác minh trên Flow |
-| `settings_json` | Aspect ratio/model/output mặc định đã validate |
+| `archived_at` | Lifecycle archive duy nhất được persist; workflow status được derive từ graph |
+| `flow_project_id`, `flow_project_url`, `flow_project_name` | Deferred sang Phase 2; không có trong schema Phase 1 |
+| `settings_json` | Deferred đến khi generation settings có contract đã duyệt |
 | `created_at`, `updated_at` | UTC timestamp |
 
 ### `prompt_templates` và `prompt_template_versions`
 
 - `prompt_templates`: identity, name, purpose, current version.
-- `prompt_template_versions`: immutable content, biến cho phép, schema/version, thời điểm tạo.
-- Scene được import có thể lưu `source_template_version_id` để biết Scene Template nào đã tạo payload. Phase 1 không lưu một Script object hoặc rendered-script snapshot riêng.
+- `prompt_template_versions`: immutable content, variable definitions lưu thành JSON snapshot đã validate, schema/version, hash và thời điểm tạo.
+- Current version được repository lấy theo `(major, minor)` lớn nhất; không lưu pointer vòng giữa hai table.
+- Scene import trỏ tới `scene_import_batches`; batch giữ `template_version_id`, mode và hashes tối thiểu để truy đúng provenance mà không lặp trên từng Scene.
 
 ### Scene creation flow — không có `scripts`
 
 - `Script` không phải domain object, module UI, repository hay bảng SQLite trong Phase 1.
 - Flow tạo Scenes nhận metadata Episode, Scene Template version và `Nội dung nguồn` tùy chọn để render prompt cho người dùng copy sang ChatGPT.
-- `Nội dung nguồn`, rendered prompt và raw JSON đang preview là state tạm của flow; không có revision/persistence riêng. Sau khi import thành công, danh sách Scene có cấu trúc là nguồn dữ liệu chính.
+- `Nội dung nguồn`, rendered prompt và raw JSON đang preview là state tạm của flow; không persist nội dung. Sau khi import, một `scene_import_batches` record bất biến giữ TemplateVersion + payload/rendered-prompt hash, còn danh sách Scene có cấu trúc là nguồn dữ liệu chính.
 - Import JSON dùng validation trước transaction; payload sai không tạo Scene nửa chừng.
 
 ### `scenes`
@@ -117,12 +118,12 @@ Tên trường dưới đây là logical schema; kiểu và migration cụ thể
 | Trường | Ý nghĩa |
 | --- | --- |
 | `id`, `episode_id` | Identity và owner |
-| `scene_order` | Thứ tự hiện hành, unique trong Episode |
-| `title`, `summary`, `narration` | Nội dung biên tập |
-| `image_prompt`, `video_prompt` | Prompt làm việc hiện hành |
+| `display_order`, `canonical_no` | Thứ tự biên tập có thể đổi và số canonical ổn định |
+| `title`, `summary`, `narration`, `visual_description` | Nội dung biên tập; narration thuộc trực tiếp Scene |
+| `scene_type`, `default_media_type`, `notes` | Contract editor hiện hành |
 | `status` | Draft/review/approved/needs changes |
 | `revision_no` | Optimistic concurrency đơn giản |
-| `source_template_version_id` | Scene Template đã dùng khi import; nullable với Scene tạo thủ công |
+| `source_import_batch_id` | Provenance batch đã tạo Scene; nullable với Scene tạo thủ công |
 | `created_at`, `updated_at` | UTC timestamp |
 
 Phase 1 không có `scene_revisions`. Scene được cập nhật trực tiếp; khi một prompt được dùng để generate media ở Phase 2, `generation_attempts.prompt_snapshot` giữ bằng chứng bất biến của lần tạo đó.
@@ -132,6 +133,7 @@ Phase 1 không có `scene_revisions`. Scene được cập nhật trực tiếp;
 - Metadata cho file reference local: tên, path, MIME, hash, thumbnail.
 - Có thể gắn mặc định cho Episode hoặc gắn riêng cho asset slot.
 - Join table giữ thứ tự reference vì UI/model có thể giới hạn số lượng và vai trò.
+- Deferred khỏi migration Phase 1 đầu tiên vì M1–M4 chưa có UI/use case được duyệt; chỉ thêm bằng migration sau khi contract reference được chốt.
 
 ### `asset_slots`
 
@@ -140,13 +142,12 @@ Phase 1 không có `scene_revisions`. Scene được cập nhật trực tiếp;
 | Trường | Ý nghĩa |
 | --- | --- |
 | `id`, `scene_id` | Identity và scene |
-| `asset_order` | Số thứ tự trong scene |
+| `episode_id`, `slot_order` | Episode denormalized có FK kiểm soát và thứ tự slot trong Scene |
 | `canonical_name` | Tên cần có trên Flow và local |
 | `media_type` | `image` hoặc `video` |
-| `required` | Có bắt buộc để hoàn tất Episode không |
-| `accepted_media_version_id` | Candidate được duyệt, nullable |
+| `prompt`, `required`, `status` | Working prompt, mức bắt buộc và `draft/ready/fulfilled` |
 
-Unique constraint đề xuất: `(scene_id, asset_order)` và `canonical_name` trong một Episode.
+Unique constraint: `(scene_id, slot_order)` và `canonical_name` trong một Episode. Candidate/file thực tế nằm ở `assets`; partial unique index giới hạn một Asset accepted cho mỗi slot.
 
 ### `generation_attempts`
 
@@ -162,11 +163,12 @@ Unique constraint đề xuất: `(scene_id, asset_order)` và `canonical_name` t
 - Các trường chính: `flow_project_ref`, `remote_asset_ref`, `observed_name`, `expected_name`, `observed_prompt`, `observed_created_at`, `mapping_confidence`, `rename_verified_at`.
 - Nếu `mapping_confidence` không đạt ngưỡng chắc chắn, automation phải dừng chờ người dùng.
 
-### `media_versions`
+### `assets` Phase 1 và `media_versions` Phase 2+
 
-- Một record cho mỗi file/candidate local.
-- Lưu source Flow asset, path, extension, size, SHA-256, dimensions/duration nếu đọc được, `accepted_at`, `rejected_at`.
-- File accepted không bị ghi đè khi có generation mới.
+- Phase 1 dùng `assets` cho một candidate/file thuộc AssetSlot: lifecycle `candidate/accepted/rejected`, revision, origin, prompt snapshot, path, MIME, size, SHA-256, dimensions/duration và lifecycle timestamps.
+- File integrity `unattached/available/missing/hash_mismatch` được derive khi đọc/preflight; file mất không đổi lifecycle accepted/rejected.
+- Phase 2 có thể mở rộng bằng `generation_attempt_id` hoặc tách read model `media_versions` nếu PoC chứng minh cần thiết; không tạo table trùng nghĩa trước use case.
+- File accepted không bị ghi đè khi có generation mới và thao tác archive metadata không tự động xóa binary.
 
 ### `jobs` và `job_events`
 
