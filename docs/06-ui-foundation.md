@@ -42,13 +42,13 @@ Danh sách episode M3 dùng dữ liệu in-memory; action tạo/chỉnh sửa m�
 
 ## M3 Episode Workspace review routes
 
-Episode Workspace dùng dữ liệu mock/in-memory và giữ nguyên app shell M1. Target navigation sau khi đơn giản hóa workflow chỉ gồm `Overview / Scenes / Assets`; không có tab `Script`. Overview là nội dung duy nhất đã được triển khai, các tab còn lại xác nhận navigation shell:
+Episode Workspace dùng dữ liệu mock/in-memory và giữ nguyên app shell M1. Navigation chỉ gồm `Overview / Scenes / Assets`; không có tab `Script`. Cả ba tab M3–M4 đã được triển khai làm baseline UI cho M5:
 
 - Overview: `/?episodeWorkspace=overview&episode=peaceful-moments#episodes`
-- Scenes placeholder: `/?episodeWorkspace=scenes&episode=peaceful-moments#episodes`
-- Assets placeholder: `/?episodeWorkspace=assets&episode=peaceful-moments#episodes`
+- Scenes: `/?episodeWorkspace=scenes&episode=peaceful-moments#episodes`
+- Assets: `/?episodeWorkspace=assets&episode=peaceful-moments#episodes`
 
-Code hiện hành còn tab `Script` từ plan cũ; việc loại bỏ tab/route này thuộc lượt implementation kế tiếp, không nằm trong thay đổi tài liệu ngày 2026-10-24.
+M5 không thay đổi visual contract này; persistence implementation sau review phải giữ nguyên interaction/layout đã duyệt và chỉ thay nguồn dữ liệu cùng error/loading/conflict state.
 
 ## Tokens
 
