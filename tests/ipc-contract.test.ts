@@ -9,6 +9,7 @@ import {
 import { studioChannels } from "../src/shared/ipc"
 import type { TempFoundation } from "./helpers/temp-foundation"
 import { createTempFoundation } from "./helpers/temp-foundation"
+import { seedSceneTemplate } from "./helpers/seed"
 
 class FakeRegistrar implements IpcRegistrar {
   readonly handlers = new Map<string, (event: unknown, input: unknown) => unknown>()
@@ -38,6 +39,9 @@ afterEach(() => testContext.cleanup())
 describe("typed IPC boundary", () => {
   it("registers explicit use-case channels and rejects invalid input", async () => {
     expect(registrar.handlers.has(studioChannels.episodesCreate)).toBe(true)
+    expect(registrar.handlers.has(studioChannels.templatesSaveEdit)).toBe(true)
+    expect(registrar.handlers.has(studioChannels.episodeThumbnailsImport)).toBe(true)
+    expect(registrar.handlers.has(studioChannels.episodeThumbnailsRead)).toBe(true)
     expect([...registrar.handlers.keys()].some((channel) => channel.includes("execute-sql"))).toBe(false)
     await expect(
       registrar.invoke(studioChannels.episodesCreate, {
@@ -48,6 +52,40 @@ describe("typed IPC boundary", () => {
         extra: true,
       }),
     ).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_ERROR", retryable: false } })
+  })
+
+  it("exposes atomic Template edit and restricted thumbnail use cases", async () => {
+    const template = seedSceneTemplate(testContext.foundation)
+    const currentVersion = template.versions[0]!
+    const edited = await registrar.invoke(studioChannels.templatesSaveEdit, {
+      id: template.id,
+      expectedRevisionNo: template.revisionNo,
+      patch: { description: "Template đã được cập nhật nguyên tử qua typed IPC." },
+      version: {
+        content: currentVersion.content,
+        variables: currentVersion.variables,
+        changeNote: "Tạo immutable version qua IPC.",
+        createdByName: "Test",
+      },
+    })
+    expect(edited).toMatchObject({
+      ok: true,
+      data: { revisionNo: 2, versions: [{ minor: 1 }, { minor: 0 }] },
+    })
+
+    const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0])
+    const imported = await registrar.invoke(studioChannels.episodeThumbnailsImport, {
+      fileName: "ipc.png",
+      mimeType: "image/png",
+      dataBase64: png.toString("base64"),
+    }) as { ok: true; data: { relativePath: string } }
+    expect(imported).toMatchObject({ ok: true, data: { mimeType: "image/png" } })
+    await expect(registrar.invoke(studioChannels.episodeThumbnailsRead, {
+      relativePath: imported.data.relativePath,
+    })).resolves.toMatchObject({ ok: true, data: { dataUrl: expect.stringMatching(/^data:image\/png;base64,/) } })
+    await expect(registrar.invoke(studioChannels.episodeThumbnailsRead, {
+      relativePath: "../outside.png",
+    })).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_ERROR" } })
   })
 
   it("returns a validated response envelope for valid commands", async () => {
@@ -61,6 +99,31 @@ describe("typed IPC boundary", () => {
       ok: true,
       data: { title: "Episode qua IPC", topic: "science", revisionNo: 1, archivedAt: null },
     })
+  })
+
+  it("maps optimistic concurrency conflicts to a typed IPC error without overwriting data", async () => {
+    const created = await registrar.invoke(studioChannels.episodesCreate, {
+      title: "Episode conflict IPC",
+      topic: "science",
+      description: "Mô tả hợp lệ để kiểm tra optimistic concurrency qua IPC.",
+      createdByName: "Test",
+    }) as { ok: true; data: { id: string } }
+    const first = await registrar.invoke(studioChannels.episodesUpdate, {
+      id: created.data.id,
+      expectedRevisionNo: 1,
+      updatedByName: "Test",
+      patch: { notes: "Bản ghi đã lưu" },
+    })
+    expect(first).toMatchObject({ ok: true, data: { notes: "Bản ghi đã lưu", revisionNo: 2 } })
+
+    await expect(registrar.invoke(studioChannels.episodesUpdate, {
+      id: created.data.id,
+      expectedRevisionNo: 1,
+      updatedByName: "Test",
+      patch: { notes: "Bản stale không được ghi đè" },
+    })).resolves.toMatchObject({ ok: false, error: { code: "STALE_REVISION", retryable: false } })
+    await expect(registrar.invoke(studioChannels.episodesGet, { id: created.data.id }))
+      .resolves.toMatchObject({ ok: true, data: { notes: "Bản ghi đã lưu", revisionNo: 2 } })
   })
 
   it("fails closed when a handler returns a response outside its schema", async () => {

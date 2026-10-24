@@ -200,15 +200,22 @@
 
 ### D-032 — Atomic Template edit qua typed IPC
 
-**Status:** Accepted trong kế hoạch M6 ngày 2026-10-24.
+**Status:** Accepted/Implemented trong M6 ngày 2026-10-24; manual acceptance PASS.
 **Decision:** bổ sung `templates.saveEdit` để một thao tác UI có thể update metadata và append immutable TemplateVersion trong cùng application transaction. Command dùng `expectedRevisionNo`, request/response schema strict và trả aggregate đã commit.
+**Revision semantics:** một `saveEdit` thành công làm tăng Template `revision_no` đúng một lần, kể cả khi command chứa cả metadata patch và version mới; toàn bộ thay đổi rollback nếu bất kỳ bước nào lỗi.
 **Reason:** màn hình đã duyệt có một nút Save cho cả metadata lẫn nội dung version; gọi hai IPC riêng có thể để lại partial commit mà renderer không thể rollback an toàn. Đây là contract additive, không đổi schema hoặc invariant version bất biến.
 
 ### D-033 — Episode thumbnail IPC giới hạn trong workspace
 
-**Status:** Accepted trong kế hoạch M6 ngày 2026-10-24.
+**Status:** Accepted/Implemented trong M6 ngày 2026-10-24; manual acceptance PASS.
 **Decision:** bổ sung use case typed IPC hẹp để import/read Episode thumbnail trong workspace. Main validate image/size/path và chỉ trả relative path hoặc nội dung ảnh cần hiển thị; không expose generic filesystem, absolute path hoặc `ipcRenderer`.
 **Reason:** renderer sandbox không thể tự tạo một workspace-relative file đáng tin cậy, trong khi contract cấm blob trong SQLite và absolute path trong dữ liệu Episode.
+
+### D-034 — Sandboxed preload dùng CommonJS artifact
+
+**Status:** Accepted/Implemented trong M6 ngày 2026-10-24; dev, packaged bridge smoke và manual acceptance PASS.
+**Decision:** build preload thành CommonJS `index.cjs` và dùng một shared artifact name cho cả build config lẫn `BrowserWindow`. Giữ nguyên `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`; renderer fail-fast nếu typed bridge M6 không tồn tại và không dùng mock/in-memory fallback.
+**Reason:** Electron sandboxed preload không load được bundle ESM `index.mjs` trong cả dev và packaged app (`SyntaxError: Cannot use import statement outside a module`), khiến `contextBridge.exposeInMainWorld` không chạy và `window.studio` là `undefined`.
 
 ## 3. Quyết định Phase 1 đã đóng
 
@@ -327,7 +334,7 @@ Cần chốt backup chỉ gồm metadata hay gồm cả media. Đề xuất hai 
 
 ## 7. Checklist duyệt kế hoạch
 
-M5A và M5B đã Approved/Completed ngày 2026-10-24. Kế hoạch M6 đã Approved cùng D-032–D-033 ngày 2026-10-24; implementation chỉ nối Template/Episode và phải dừng checkpoint trước khi commit/push phần M6. D-002–D-007, D-016 và D-022–D-033 đã đóng cho phạm vi hiện tại; Q1, Q2, Q3 schema, Q5 và Q6 không còn là câu hỏi mở.
+M5A, M5B và M6 đã Approved/Completed ngày 2026-10-24. M6 chỉ nối Template/Episode; D-032–D-034 đã được implement và manual acceptance PASS. D-002–D-007, D-016 và D-022–D-034 đã đóng cho phạm vi hiện tại; Q1, Q2, Q3 schema, Q5 và Q6 không còn là câu hỏi mở.
 
 Các quyết định còn cần trước phase tương ứng:
 

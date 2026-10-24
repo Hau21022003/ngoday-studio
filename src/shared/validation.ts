@@ -282,6 +282,35 @@ export const createTemplateVersionCommandSchema = z
   })
   .strict()
 
+export const saveTemplateEditCommandSchema = z
+  .object({
+    id: uuid,
+    expectedRevisionNo: revision,
+    patch: z
+      .object({
+        name: z.string().trim().min(3).max(80).optional(),
+        description: z.string().trim().min(10).max(240).optional(),
+        purpose: templatePurposeSchema.optional(),
+        status: templateStatusSchema.optional(),
+      })
+      .strict()
+      .refine((patch) => Object.keys(patch).length > 0, "Patch không được rỗng.")
+      .optional(),
+    version: z
+      .object({
+        content: z.string().min(1).max(20_000),
+        variables: variablesSchema,
+        changeNote: z.string().trim().min(3).max(160),
+        createdByName: z.string().trim().min(1).max(80),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .refine((value) => value.patch !== undefined || value.version !== undefined, {
+    message: "Cần metadata patch hoặc version mới.",
+  })
+
 export const renderTemplateCommandSchema = z
   .object({ templateVersionId: uuid, values: z.record(z.string(), z.string().max(20_000)) })
   .strict()
@@ -289,6 +318,31 @@ export const renderTemplateCommandSchema = z
 const relativePath = z.string().max(500).refine((value) => !/^(?:[a-zA-Z]:[\\/]|[\\/]{1,2})/.test(value) && !value.split(/[\\/]/).includes(".."), {
   message: "Path phải là relative path an toàn.",
 })
+
+const thumbnailMimeTypeSchema = z.enum(["image/png", "image/jpeg", "image/webp"])
+const base64PayloadSchema = z
+  .string()
+  .min(4)
+  .max(7_000_000)
+  .regex(/^[A-Za-z0-9+/]+={0,2}$/, "Dữ liệu thumbnail phải là base64 hợp lệ.")
+
+export const importEpisodeThumbnailCommandSchema = z
+  .object({
+    fileName: z.string().trim().min(1).max(255),
+    mimeType: thumbnailMimeTypeSchema,
+    dataBase64: base64PayloadSchema,
+  })
+  .strict()
+
+export const readEpisodeThumbnailCommandSchema = z.object({ relativePath }).strict()
+
+export const episodeThumbnailContentSchema = z
+  .object({
+    relativePath,
+    mimeType: thumbnailMimeTypeSchema,
+    dataUrl: z.string().max(7_100_000).regex(/^data:image\/(?:png|jpeg|webp);base64,/),
+  })
+  .strict()
 
 export const createEpisodeCommandSchema = z
   .object({

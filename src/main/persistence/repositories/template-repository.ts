@@ -135,7 +135,7 @@ export class TemplateRepository {
     return version
   }
 
-  private insertVersion(version: TemplateVersion) {
+  insertVersion(version: TemplateVersion) {
     this.database.connection
       .prepare(`
         INSERT INTO prompt_template_versions (

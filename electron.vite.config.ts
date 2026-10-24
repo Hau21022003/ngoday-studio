@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import { defineConfig, externalizeDepsPlugin } from "electron-vite"
 
+import { preloadEntryFileName, preloadModuleFormat } from "./src/shared/runtime-paths"
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
@@ -17,6 +19,10 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: resolve(__dirname, "src/preload/index.ts"),
+        output: {
+          format: preloadModuleFormat,
+          entryFileNames: preloadEntryFileName,
+        },
       },
     },
   },

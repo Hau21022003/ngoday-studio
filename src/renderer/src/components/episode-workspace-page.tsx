@@ -18,31 +18,22 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState, type MouseEvent } from "react"
 
+import type { EpisodeAggregate } from "../../../shared/domain"
 import { EpisodeAssetsTab } from "@/components/episode-assets-tab"
+import { topics, workflowStatuses } from "@/components/episode-data"
 import { EpisodeScenesTab } from "@/components/episode-scenes-tab"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ErrorState, LoadingState } from "@/components/ui/state-feedback"
 import { Tabs, type TabItem } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { errorMessage, localActorName, unwrapResult } from "@/data/studio-client"
+import { useSingleFlightAutosave, type AutosaveStatus } from "@/hooks/use-single-flight-autosave"
 import { cn } from "@/lib/utils"
 
 type EpisodeWorkspaceTab = "assets" | "overview" | "scenes"
-
-const workspaceEpisode = {
-  id: "peaceful-moments",
-  title: "Tập 01: Bình yên từ những điều nhỏ bé",
-  description:
-    "Tập phim kể về những khoảnh khắc bình dị trong cuộc sống thường ngày, nơi mà hạnh phúc thường đến từ những điều rất nhỏ bé. Thông qua hành trình của nhân vật chính, khán giả sẽ cùng cảm nhận giá trị của sự chậm lại, quan sát và biết ơn những điều giản đơn xung quanh mình.",
-  topic: "Cuộc sống thường ngày",
-  status: "Đang sản xuất",
-  sceneCount: 12,
-  createdAt: "2024-06-12T10:24:00+07:00",
-  updatedAt: "2024-06-14T16:03:00+07:00",
-  progress: 60,
-  thumbnail: "/episode-thumbnails/peaceful-moments.png",
-} as const
 
 const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
@@ -74,23 +65,23 @@ function episodeListHref() {
   return `${window.location.pathname}#episodes`
 }
 
-function episodeEditHref() {
-  return `${window.location.pathname}?episodeAuthor=edit&episode=${workspaceEpisode.id}#episodes`
+function episodeEditHref(episodeId: string) {
+  return `${window.location.pathname}?episodeAuthor=edit&episode=${encodeURIComponent(episodeId)}#episodes`
 }
 
-function updateWorkspaceUrl(tab: EpisodeWorkspaceTab) {
+function updateWorkspaceUrl(tab: EpisodeWorkspaceTab, episodeId: string) {
   const url = new URL(window.location.href)
   url.searchParams.delete("episodeAuthor")
   url.searchParams.set("episodeWorkspace", tab)
-  url.searchParams.set("episode", workspaceEpisode.id)
+  url.searchParams.set("episode", episodeId)
   url.hash = "episodes"
   window.history.replaceState(null, "", url)
 }
 
-function workspaceHref(tab: EpisodeWorkspaceTab) {
+function workspaceHref(tab: EpisodeWorkspaceTab, episodeId: string) {
   const params = new URLSearchParams()
   params.set("episodeWorkspace", tab)
-  params.set("episode", workspaceEpisode.id)
+  params.set("episode", episodeId)
   return `${window.location.pathname}?${params.toString()}#episodes`
 }
 
@@ -124,13 +115,13 @@ function SectionHeading({ icon: Icon, children }: { icon: LucideIcon; children: 
   )
 }
 
-function EpisodeInformation() {
+function EpisodeInformation({ episode }: { episode: EpisodeAggregate }) {
   const rows = [
-    { label: "Chủ đề", value: <Badge variant="attention">{workspaceEpisode.topic}</Badge> },
-    { label: "Trạng thái", value: <span className="inline-flex items-center gap-2 font-semibold text-success"><span aria-hidden="true" className="size-2 rounded-full bg-success" />{workspaceEpisode.status}</span> },
-    { label: "Số cảnh", value: <span className="inline-flex items-center gap-2"><Clapperboard aria-hidden="true" className="size-4" />{workspaceEpisode.sceneCount} cảnh</span> },
-    { label: "Tạo lúc", value: <time dateTime={workspaceEpisode.createdAt} className="inline-flex items-center gap-2 tabular-nums"><CalendarDays aria-hidden="true" className="size-4" />{dateTimeFormatter.format(new Date(workspaceEpisode.createdAt))}</time> },
-    { label: "Cập nhật gần nhất", value: <time dateTime={workspaceEpisode.updatedAt} className="inline-flex items-center gap-2 tabular-nums"><Clock3 aria-hidden="true" className="size-4" />{dateTimeFormatter.format(new Date(workspaceEpisode.updatedAt))}</time> },
+    { label: "Chủ đề", value: <Badge variant="attention">{topics[episode.topic].label}</Badge> },
+    { label: "Trạng thái", value: <span className="inline-flex items-center gap-2 font-semibold text-success"><span aria-hidden="true" className="size-2 rounded-full bg-success" />{workflowStatuses[episode.workflowStatus].label}</span> },
+    { label: "Số cảnh", value: <span className="inline-flex items-center gap-2"><Clapperboard aria-hidden="true" className="size-4" />{episode.sceneCount} cảnh</span> },
+    { label: "Tạo lúc", value: <time dateTime={episode.createdAt} className="inline-flex items-center gap-2 tabular-nums"><CalendarDays aria-hidden="true" className="size-4" />{dateTimeFormatter.format(new Date(episode.createdAt))}</time> },
+    { label: "Cập nhật gần nhất", value: <time dateTime={episode.updatedAt} className="inline-flex items-center gap-2 tabular-nums"><Clock3 aria-hidden="true" className="size-4" />{dateTimeFormatter.format(new Date(episode.updatedAt))}</time> },
   ]
 
   return (
@@ -148,27 +139,21 @@ function EpisodeInformation() {
   )
 }
 
-function ProductionProgress() {
+function ProductionProgress({ episode }: { episode: EpisodeAggregate }) {
+  const hasScenes = episode.sceneCount > 0
   const steps = [
-    { label: "Scenes", detail: "Đang thực hiện", dot: "bg-warning", text: "text-warning" },
-    { label: "Assets", detail: "Chưa bắt đầu", dot: "bg-border-strong", text: "text-muted-foreground" },
+    { label: "Scenes", detail: hasScenes ? "Đang thực hiện" : "Chưa bắt đầu", dot: hasScenes ? "bg-warning" : "bg-border-strong", text: hasScenes ? "text-warning" : "text-muted-foreground" },
+    { label: "Assets", detail: episode.productionProgress > 0 ? "Đang thực hiện" : "Chưa bắt đầu", dot: episode.productionProgress > 0 ? "bg-warning" : "bg-border-strong", text: episode.productionProgress > 0 ? "text-warning" : "text-muted-foreground" },
   ]
 
   return (
     <section className="rounded-lg border border-border bg-surface p-4 shadow-panel sm:p-5" aria-labelledby="production-progress-title">
       <div id="production-progress-title"><SectionHeading icon={Target}>Tiến độ sản xuất</SectionHeading></div>
       <div className="mt-4 flex items-center gap-4">
-        <div
-          role="progressbar"
-          aria-label="Tiến độ sản xuất"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={workspaceEpisode.progress}
-          className="h-2 flex-1 overflow-hidden rounded-full bg-muted"
-        >
-          <div className="h-full rounded-full bg-warning" style={{ width: `${workspaceEpisode.progress}%` }} />
+        <div role="progressbar" aria-label="Tiến độ sản xuất" aria-valuemin={0} aria-valuemax={100} aria-valuenow={episode.productionProgress} className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full bg-warning" style={{ width: `${episode.productionProgress}%` }} />
         </div>
-        <span className="text-xs font-bold tabular-nums text-primary">{workspaceEpisode.progress}%</span>
+        <span className="text-xs font-bold tabular-nums text-primary">{episode.productionProgress}%</span>
       </div>
       <div className="mt-4 grid grid-cols-2 divide-x divide-border">
         {steps.map((step) => (
@@ -185,7 +170,7 @@ function ProductionProgress() {
   )
 }
 
-function QuickActions() {
+function QuickActions({ episodeId }: { episodeId: string }) {
   return (
     <section className="rounded-lg border border-border bg-surface p-4 shadow-panel sm:p-5" aria-labelledby="quick-actions-title">
       <div id="quick-actions-title"><SectionHeading icon={Zap}>Thao tác nhanh</SectionHeading></div>
@@ -193,11 +178,7 @@ function QuickActions() {
         {quickActions.map((action) => {
           const Icon = action.icon
           return (
-            <a
-              key={action.tab}
-              href={workspaceHref(action.tab)}
-              className="group flex min-w-0 items-center gap-2.5 rounded-md border border-border bg-surface p-3 text-left hover:border-selected-border hover:bg-accent-soft/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 2xl:items-start"
-            >
+            <a key={action.tab} href={workspaceHref(action.tab, episodeId)} className="group flex min-w-0 items-center gap-2.5 rounded-md border border-border bg-surface p-3 text-left hover:border-selected-border hover:bg-accent-soft/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 2xl:items-start">
               <Icon aria-hidden="true" className="size-5 shrink-0 text-accent" />
               <span className="min-w-0 flex-1">
                 <span className="block text-xs font-bold text-primary">{action.label}</span>
@@ -212,82 +193,154 @@ function QuickActions() {
   )
 }
 
-function Overview({ notes, onNotesChange }: { notes: string; onNotesChange: (value: string) => void }) {
+function autosaveLabel(status: AutosaveStatus, error: unknown) {
+  if (status === "saving") return "Đang lưu ghi chú…"
+  if (status === "dirty") return "Có thay đổi chưa lưu"
+  if (status === "saved") return "Đã lưu"
+  if (status === "conflict") return "Ghi chú đã thay đổi ở nơi khác. Bản nháp của bạn vẫn được giữ lại."
+  if (status === "error") return errorMessage(error, "Không thể lưu ghi chú. Bản nháp của bạn vẫn được giữ lại.")
+  return "Ghi chú được tự động lưu"
+}
+
+function Overview({ episode, thumbnailUrl, notes, autosaveStatus, autosaveError, onNotesChange, onNotesBlur, onRetryAutosave }: {
+  episode: EpisodeAggregate
+  thumbnailUrl: string | null
+  notes: string
+  autosaveStatus: AutosaveStatus
+  autosaveError: unknown
+  onNotesChange: (value: string) => void
+  onNotesBlur: () => void
+  onRetryAutosave: () => void
+}) {
   return (
     <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(23rem,1fr)]">
       <div className="min-w-0 space-y-4">
         <figure className="relative aspect-video overflow-hidden rounded-lg border border-border bg-primary shadow-panel">
-          <img
-            src={workspaceEpisode.thumbnail}
-            alt="Một em nhỏ và chú mèo ngắm hoàng hôn trên ngôi làng miền núi"
-            width={1672}
-            height={941}
-            fetchPriority="high"
-            className="h-full w-full object-cover"
-          />
-          <figcaption className="absolute bottom-[14%] right-[5%] max-w-[50%] text-right text-white [text-shadow:0_2px_12px_rgb(9_27_58/0.45)]">
-            <span className="inline-flex rounded-full border border-white/70 bg-primary/15 px-3 py-1 text-xs font-semibold">Tập 01</span>
-            <span className="mt-3 block text-3xl font-bold tracking-[-0.035em] text-balance sm:text-5xl">Bình yên</span>
-            <span className="mt-1 block text-sm font-semibold sm:text-xl">từ những điều nhỏ bé</span>
+          <img src={thumbnailUrl ?? "/episode-thumbnails/peaceful-moments.png"} alt={`Thumbnail ${episode.title}`} width={1672} height={941} fetchPriority="high" className="h-full w-full object-cover" />
+          <figcaption className="absolute bottom-[14%] right-[5%] max-w-[55%] text-right text-white [text-shadow:0_2px_12px_rgb(9_27_58/0.45)]">
+            <span className="inline-flex rounded-full border border-white/70 bg-primary/15 px-3 py-1 text-xs font-semibold">Episode</span>
+            <span className="mt-3 block text-3xl font-bold tracking-[-0.035em] text-balance sm:text-5xl">{episode.title}</span>
           </figcaption>
         </figure>
 
         <section className="rounded-lg border border-border bg-surface p-4 shadow-panel sm:p-5" aria-labelledby="episode-description-title">
           <div id="episode-description-title"><SectionHeading icon={FileText}>Mô tả tập phim</SectionHeading></div>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground text-pretty">{workspaceEpisode.description}</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground text-pretty">{episode.description}</p>
         </section>
 
         <section className="rounded-lg border border-border bg-surface p-4 shadow-panel sm:p-5" aria-labelledby="episode-notes-title">
           <div id="episode-notes-title"><SectionHeading icon={NotebookPen}>Ghi chú</SectionHeading></div>
           <label htmlFor="workspace-notes" className="sr-only">Ghi chú cho tập phim</label>
-          <Textarea
-            id="workspace-notes"
-            name="workspace-notes"
-            autoComplete="off"
-            value={notes}
-            maxLength={240}
-            className="mt-3 min-h-16 bg-accent-soft/40 text-sm"
-            placeholder="Nhập ghi chú cho tập phim này…"
-            onChange={(event) => onNotesChange(event.target.value)}
-          />
+          <Textarea id="workspace-notes" name="workspace-notes" autoComplete="off" value={notes} maxLength={240} className="mt-3 min-h-16 bg-accent-soft/40 text-sm" placeholder="Nhập ghi chú cho tập phim này…" onChange={(event) => onNotesChange(event.target.value)} onBlur={onNotesBlur} />
+          <div className="mt-2 flex min-h-7 items-center justify-between gap-3" aria-live="polite">
+            <p className={cn("text-[11px]", autosaveStatus === "error" || autosaveStatus === "conflict" ? "text-danger" : "text-muted-foreground")}>{autosaveLabel(autosaveStatus, autosaveError)}</p>
+            {(autosaveStatus === "error" || autosaveStatus === "conflict") && (
+              <Button type="button" variant="outline" size="sm" onClick={onRetryAutosave}>
+                {autosaveStatus === "conflict" ? "Đồng bộ và lưu lại" : "Thử lưu lại"}
+              </Button>
+            )}
+          </div>
         </section>
       </div>
 
       <div className="min-w-0 space-y-4">
-        <EpisodeInformation />
-        <ProductionProgress />
-        <QuickActions />
+        <EpisodeInformation episode={episode} />
+        <ProductionProgress episode={episode} />
+        <QuickActions episodeId={episode.id} />
       </div>
     </div>
   )
 }
 
-function EpisodeWorkspacePage({ initialTab }: { initialTab: EpisodeWorkspaceTab }) {
+function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWorkspaceTab; episodeId?: string }) {
   const [activeTab, setActiveTab] = useState<EpisodeWorkspaceTab>(initialTab)
   const [assetExportRequest, setAssetExportRequest] = useState(0)
+  const [episode, setEpisode] = useState<EpisodeAggregate | null>(null)
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
   const [notes, setNotes] = useState("")
-  const [notesDirty, setNotesDirty] = useState(false)
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading")
+  const loadRequest = useRef(0)
+
+  const autosave = useSingleFlightAutosave<string>({
+    initialRevisionNo: episode?.revisionNo ?? 0,
+    delayMs: 750,
+    save: async (value, expectedRevisionNo) => {
+      if (!episodeId) throw new Error("Thiếu mã episode.")
+      const updated = await unwrapResult(window.studio.episodes.update({ id: episodeId, expectedRevisionNo, updatedByName: localActorName, patch: { notes: value } }))
+      setEpisode((current) => current ? { ...current, ...updated } : current)
+      return { revisionNo: updated.revisionNo }
+    },
+  })
+
+  function loadEpisode() {
+    const requestId = ++loadRequest.current
+    setLoadState("loading")
+    setThumbnailUrl(null)
+    void (async () => {
+      try {
+        if (!episodeId) throw new Error("Thiếu mã episode.")
+        const aggregate = await unwrapResult(window.studio.episodes.get({ id: episodeId }))
+        let nextThumbnailUrl: string | null = null
+        if (aggregate.thumbnailRelativePath) {
+          const thumbnail = await unwrapResult(window.studio.episodeThumbnails.read({ relativePath: aggregate.thumbnailRelativePath }))
+          nextThumbnailUrl = thumbnail.dataUrl
+        }
+        if (requestId !== loadRequest.current) return
+        setEpisode(aggregate)
+        setNotes(aggregate.notes)
+        setThumbnailUrl(nextThumbnailUrl)
+        setLoadState("ready")
+      } catch {
+        if (requestId === loadRequest.current) setLoadState("error")
+      }
+    })()
+  }
+
+  useEffect(loadEpisode, [episodeId])
 
   useEffect(() => {
-    if (!notesDirty) return
+    if (!autosave.dirty) return
     const handleBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault()
     window.addEventListener("beforeunload", handleBeforeUnload)
     return () => window.removeEventListener("beforeunload", handleBeforeUnload)
-  }, [notesDirty])
+  }, [autosave.dirty])
 
   function navigateTab(tab: EpisodeWorkspaceTab) {
+    void autosave.flush()
     setActiveTab(tab)
-    updateWorkspaceUrl(tab)
+    if (episodeId) updateWorkspaceUrl(tab, episodeId)
   }
+
+  function guardDirtyNavigation(event: MouseEvent<HTMLAnchorElement>) {
+    if (!autosave.dirty) return
+    event.preventDefault()
+    void autosave.flush()
+  }
+
+  async function retryAutosave() {
+    if (autosave.status === "conflict" && episodeId) {
+      try {
+        const latest = await unwrapResult(window.studio.episodes.get({ id: episodeId }))
+        setEpisode(latest)
+        autosave.updateRevision(latest.revisionNo)
+      } catch {
+        return
+      }
+    }
+    await autosave.retry()
+  }
+
+  if (loadState === "loading") return <div className="min-h-screen bg-background px-5 py-6 sm:px-7 lg:px-8 lg:py-7"><LoadingState /></div>
+  if (loadState === "error" || !episode) return <div className="min-h-screen bg-background px-5 py-6 sm:px-7 lg:px-8 lg:py-7"><ErrorState onRetry={loadEpisode} /></div>
 
   return (
     <div className="min-h-screen bg-background px-5 py-6 sm:px-7 lg:px-8 lg:py-7">
       <header className="pl-10 lg:pl-0">
         <nav aria-label="Breadcrumb">
           <ol className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-            <li><a href={episodeListHref()} className="rounded-sm hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35">Episodes</a></li>
+            <li><a href={episodeListHref()} onClick={guardDirtyNavigation} className="rounded-sm hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35">Episodes</a></li>
             <li aria-hidden="true" className="text-border-strong">/</li>
-            <li aria-current="page" className="truncate font-medium text-primary">{workspaceEpisode.title}</li>
+            <li aria-current="page" className="truncate font-medium text-primary">{episode.title}</li>
           </ol>
         </nav>
 
@@ -295,23 +348,19 @@ function EpisodeWorkspacePage({ initialTab }: { initialTab: EpisodeWorkspaceTab 
           <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Tập phim</p>
             <div className="mt-1.5 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-              <h1 className="text-page-title tracking-[-0.025em] text-primary text-balance">{workspaceEpisode.title}</h1>
+              <h1 className="text-page-title tracking-[-0.025em] text-primary text-balance">{episode.title}</h1>
               <Badge variant="success" className="h-7 shrink-0 px-3 text-xs">
                 <span aria-hidden="true" className="size-2 rounded-full bg-success" />
-                {workspaceEpisode.status}
+                {workflowStatuses[episode.workflowStatus].label}
                 <ChevronDown aria-hidden="true" className="size-3" />
               </Badge>
             </div>
           </div>
           <div className="flex items-center gap-2 self-start xl:self-auto">
             {activeTab === "assets" ? (
-              <Button type="button" variant="accent" size="lg" onClick={() => setAssetExportRequest((value) => value + 1)}>
-                <Download aria-hidden="true" />Xuất media
-              </Button>
+              <Button type="button" variant="accent" size="lg" onClick={() => setAssetExportRequest((value) => value + 1)}><Download aria-hidden="true" />Xuất media</Button>
             ) : (
-              <Button asChild variant="accent" size="lg">
-                <a href={episodeEditHref()}><Pencil aria-hidden="true" />Chỉnh sửa</a>
-              </Button>
+              <Button asChild variant="accent" size="lg"><a href={episodeEditHref(episode.id)} onClick={guardDirtyNavigation}><Pencil aria-hidden="true" />Chỉnh sửa</a></Button>
             )}
             <WorkspaceMenu />
           </div>
@@ -319,35 +368,25 @@ function EpisodeWorkspacePage({ initialTab }: { initialTab: EpisodeWorkspaceTab 
       </header>
 
       <div className="mt-5 overflow-x-auto">
-        <Tabs
-          items={tabItems}
-          value={activeTab}
-          onValueChange={navigateTab}
-          ariaLabel="Khu vực episode"
-          panelId="episode-workspace-panel"
-          className="[&_button]:flex [&_button]:items-center [&_button]:gap-2 sm:[&_button]:min-w-36 sm:[&_button]:justify-center"
-        />
+        <Tabs items={tabItems} value={activeTab} onValueChange={navigateTab} ariaLabel="Khu vực episode" panelId="episode-workspace-panel" className="[&_button]:flex [&_button]:items-center [&_button]:gap-2 sm:[&_button]:min-w-36 sm:[&_button]:justify-center" />
       </div>
 
-      <main
-        id="episode-workspace-panel"
-        role="tabpanel"
-        aria-labelledby={`episode-workspace-panel-${activeTab}-tab`}
-        className="mt-5"
-      >
+      <main id="episode-workspace-panel" role="tabpanel" aria-labelledby={`episode-workspace-panel-${activeTab}-tab`} className="mt-5">
         {activeTab === "overview" ? (
           <Overview
+            episode={episode}
+            thumbnailUrl={thumbnailUrl}
             notes={notes}
+            autosaveStatus={autosave.status}
+            autosaveError={autosave.error}
             onNotesChange={(value) => {
               setNotes(value)
-              setNotesDirty(true)
+              autosave.schedule(value)
             }}
+            onNotesBlur={() => void autosave.flush()}
+            onRetryAutosave={() => void retryAutosave()}
           />
-        ) : activeTab === "scenes" ? (
-          <EpisodeScenesTab />
-        ) : (
-          <EpisodeAssetsTab exportRequest={assetExportRequest} />
-        )}
+        ) : activeTab === "scenes" ? <EpisodeScenesTab /> : <EpisodeAssetsTab exportRequest={assetExportRequest} />}
       </main>
     </div>
   )

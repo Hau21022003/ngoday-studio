@@ -3,13 +3,14 @@ import type {
   CreateTemplateVersionCommand,
   RenderTemplateCommand,
   RenderedPrompt,
+  SaveTemplateEditCommand,
   Template,
   TemplateListQuery,
   TemplateVariableDefinition,
   TemplateVersion,
   UpdateTemplateCommand,
 } from "../../shared/domain"
-import { DomainError, NotFoundError } from "../domain/errors"
+import { DomainError, NotFoundError, StaleRevisionError } from "../domain/errors"
 import { canonicalJson, newId, normalizeKey, nowUtc, sha256 } from "../domain/helpers"
 import type { StudioDatabase } from "../persistence/database"
 import { TemplateRepository } from "../persistence/repositories/template-repository"
@@ -127,6 +128,54 @@ export class TemplateService {
       return this.database.transaction(() =>
         this.templates.appendVersion(version, command.expectedTemplateRevisionNo),
       )
+    } catch (error) {
+      rethrowSqliteConstraint(error)
+    }
+  }
+
+  saveEdit(command: SaveTemplateEditCommand) {
+    if ((!command.patch || Object.keys(command.patch).length === 0) && !command.version) {
+      throw new DomainError("VALIDATION_ERROR", "Cần metadata patch hoặc version mới.")
+    }
+    const aggregate = this.get(command.id)
+    if (aggregate.revisionNo !== command.expectedRevisionNo) throw new StaleRevisionError("Template")
+    if (command.version) validateVariableContract(command.version.content, command.version.variables)
+
+    const at = nowUtc()
+    const metadata: Template = {
+      ...aggregate,
+      ...command.patch,
+      name: command.patch?.name?.trim() ?? aggregate.name,
+      nameKey: command.patch?.name ? normalizeKey(command.patch.name) : aggregate.nameKey,
+      description: command.patch?.description?.trim() ?? aggregate.description,
+      updatedAt: at,
+    }
+    const latest = aggregate.versions[0]
+    const version: TemplateVersion | null = command.version
+      ? {
+          id: newId(),
+          templateId: aggregate.id,
+          major: latest?.major ?? 1,
+          minor: (latest?.minor ?? -1) + 1,
+          content: command.version.content,
+          variables: command.version.variables,
+          changeNote: command.version.changeNote.trim(),
+          contentHash: templateContentHash(command.version.content, command.version.variables),
+          createdByName: command.version.createdByName.trim(),
+          createdAt: at,
+        }
+      : null
+
+    try {
+      this.database.transaction(() => {
+        if (command.patch) {
+          this.templates.update(metadata, command.expectedRevisionNo)
+          if (version) this.templates.insertVersion(version)
+        } else if (version) {
+          this.templates.appendVersion(version, command.expectedRevisionNo)
+        }
+      })
+      return this.get(command.id)
     } catch (error) {
       rethrowSqliteConstraint(error)
     }

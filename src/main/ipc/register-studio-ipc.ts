@@ -14,12 +14,15 @@ import {
   createTemplateVersionCommandSchema,
   episodeAggregateSchema,
   episodeIdCommandSchema,
+  episodeThumbnailContentSchema,
   episodeSchema,
   episodeSummarySchema,
   idCommandSchema,
+  importEpisodeThumbnailCommandSchema,
   pageSchema,
   registerImportedAssetCommandSchema,
   renderedPromptSchema,
+  readEpisodeThumbnailCommandSchema,
   renderScenePromptCommandSchema,
   renderTemplateCommandSchema,
   reorderScenesCommandSchema,
@@ -27,6 +30,7 @@ import {
   scenesImportPreviewSchema,
   scenesImportResultSchema,
   sceneSchema,
+  saveTemplateEditCommandSchema,
   templateAggregateSchema,
   templateListQuerySchema,
   templateSchema,
@@ -113,6 +117,7 @@ export function registerStudioIpc(registrar: IpcRegistrar, foundation: Persisten
   registerValidatedHandler(registrar, studioChannels.templatesCreate, createTemplateCommandSchema, templateAggregateSchema, (input) => services.templates.create(input))
   registerValidatedHandler(registrar, studioChannels.templatesUpdateMetadata, updateTemplateCommandSchema, templateSchema, (input) => services.templates.updateMetadata(input))
   registerValidatedHandler(registrar, studioChannels.templatesCreateVersion, createTemplateVersionCommandSchema, templateVersionSchema, (input) => services.templates.createVersion(input))
+  registerValidatedHandler(registrar, studioChannels.templatesSaveEdit, saveTemplateEditCommandSchema, templateAggregateSchema, (input) => services.templates.saveEdit(input))
   registerValidatedHandler(registrar, studioChannels.templatesRender, renderTemplateCommandSchema, renderedPromptSchema, (input) => services.templates.render(input))
 
   registerValidatedHandler(registrar, studioChannels.episodesList, episodeListQuerySchema, pageSchema(episodeSummarySchema), (input) => services.episodes.list(input))
@@ -120,6 +125,9 @@ export function registerStudioIpc(registrar: IpcRegistrar, foundation: Persisten
   registerValidatedHandler(registrar, studioChannels.episodesCreate, createEpisodeCommandSchema, episodeSchema, (input) => services.episodes.create(input))
   registerValidatedHandler(registrar, studioChannels.episodesUpdate, updateEpisodeCommandSchema, episodeSchema, (input) => services.episodes.update(input))
   registerValidatedHandler(registrar, studioChannels.episodesArchive, archiveEpisodeCommandSchema, episodeSchema, (input) => services.episodes.archive(input))
+
+  registerValidatedHandler(registrar, studioChannels.episodeThumbnailsImport, importEpisodeThumbnailCommandSchema, episodeThumbnailContentSchema, (input) => services.episodeThumbnails.import(input))
+  registerValidatedHandler(registrar, studioChannels.episodeThumbnailsRead, readEpisodeThumbnailCommandSchema, episodeThumbnailContentSchema, (input) => services.episodeThumbnails.read(input))
 
   registerValidatedHandler(registrar, studioChannels.sceneCreationRenderPrompt, renderScenePromptCommandSchema, renderedPromptSchema, (input) => services.sceneCreation.renderPrompt(input))
   registerValidatedHandler(registrar, studioChannels.sceneCreationValidateImport, validateScenesImportCommandSchema, scenesImportPreviewSchema, (input) => services.sceneCreation.validateImport(input))

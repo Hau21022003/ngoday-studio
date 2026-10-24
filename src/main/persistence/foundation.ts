@@ -8,6 +8,7 @@ import { TemplateRepository } from "./repositories/template-repository"
 import { AssetPlanningService } from "../services/asset-planning-service"
 import { AssetService } from "../services/asset-service"
 import { EpisodeService } from "../services/episode-service"
+import { EpisodeThumbnailService } from "../services/episode-thumbnail-service"
 import { SceneCreationService } from "../services/scene-creation-service"
 import { SceneService } from "../services/scene-service"
 import { TemplateService } from "../services/template-service"
@@ -21,6 +22,7 @@ export type PersistenceFoundation = {
   services: {
     templates: TemplateService
     episodes: EpisodeService
+    episodeThumbnails: EpisodeThumbnailService
     sceneCreation: SceneCreationService
     scenes: SceneService
     assetSlots: AssetPlanningService
@@ -50,6 +52,7 @@ export async function initializePersistence(options: {
     const assets = new AssetRepository(database)
     const templateService = new TemplateService(database, templates)
     const assetService = new AssetService(database, options.workspaceRoot, scenes, slots, assets)
+    const episodeThumbnailService = new EpisodeThumbnailService(options.workspaceRoot)
 
     return {
       database,
@@ -57,6 +60,7 @@ export async function initializePersistence(options: {
       services: {
         templates: templateService,
         episodes: new EpisodeService(database, episodes, scenes, (assetId) => assetService.fileIntegrity(assetId)),
+        episodeThumbnails: episodeThumbnailService,
         sceneCreation: new SceneCreationService(
           database,
           templates,

@@ -11,15 +11,15 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
 import { TemplateAuthoringPage, type AuthoringMode } from "@/components/template-authoring-page"
 import {
   getCurrentVersion,
-  initialTemplates,
   purposeLabels,
   purposeTones,
   statusPresentation,
+  toTemplateRecord,
   type Purpose,
   type TemplateRecord,
   type TemplateVariableDefinition,
@@ -40,9 +40,11 @@ import {
 import { PageHeader } from "@/components/ui/page-header"
 import { SearchField } from "@/components/ui/search-field"
 import { Select } from "@/components/ui/select"
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state-feedback"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Tabs, type TabItem } from "@/components/ui/tabs"
 import { TemplateThumbnail } from "@/components/ui/template-thumbnail"
+import { errorMessage, unwrapResult } from "@/data/studio-client"
 
 type Category = "all" | Purpose
 type DetailTab = "overview" | "content" | "variables" | "history"
@@ -118,7 +120,7 @@ const templateColumns: readonly DataTableColumn<TemplateRecord>[] = [
     width: "11%",
     className: "px-2 text-xs font-medium tabular-nums text-muted-foreground",
     headerClassName: "px-2",
-    cell: (template) => getCurrentVersion(template).version,
+    cell: (template) => template.currentVersion ?? "—",
   },
   {
     id: "updatedAt",
@@ -153,8 +155,7 @@ function getInitialCategory(): Category {
 }
 
 function getInitialTemplateId() {
-  const templateId = new URLSearchParams(window.location.search).get("template")
-  return initialTemplates.some((template) => template.id === templateId) ? templateId! : initialTemplates[0]!.id
+  return new URLSearchParams(window.location.search).get("template") ?? ""
 }
 
 function getInitialDetailTab(): DetailTab {
@@ -215,7 +216,7 @@ function updateTemplateUrl(state: {
 }) {
   const url = new URL(window.location.href)
   url.searchParams.set("category", state.category)
-  url.searchParams.set("template", state.templateId)
+  state.templateId ? url.searchParams.set("template", state.templateId) : url.searchParams.delete("template")
   state.detailTab !== "overview"
     ? url.searchParams.set("detail", state.detailTab)
     : url.searchParams.delete("detail")
@@ -240,9 +241,15 @@ function setAuthoringUrl(mode: AuthoringMode | null) {
 }
 
 function TemplatesPage() {
-  const [templates, setTemplates] = useState<TemplateRecord[]>(() => initialTemplates)
+  const [templates, setTemplates] = useState<TemplateRecord[]>([])
   const [category, setCategory] = useState<Category>(getInitialCategory)
   const [selectedId, setSelectedId] = useState(getInitialTemplateId)
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateRecord | null>(null)
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading")
+  const [detailState, setDetailState] = useState<"idle" | "loading" | "ready" | "error">("idle")
+  const [loadError, setLoadError] = useState("")
+  const listRequestRef = useRef(0)
+  const detailRequestRef = useRef(0)
   const [detailTab, setDetailTab] = useState<DetailTab>(getInitialDetailTab)
   const [demoState, setDemoState] = useState<DemoState>(getInitialDemoState)
   const [authoring, setAuthoring] = useState<AuthoringState | null>(getInitialAuthoringState)
@@ -255,6 +262,53 @@ function TemplatesPage() {
     getSearchParam("status", ["all", "active", "experimental", "inactive"], "all"),
   )
   const [sorting, setSorting] = useState<DataTableSorting>(getInitialSorting)
+
+  const loadTemplates = useCallback(async () => {
+    const request = ++listRequestRef.current
+    setLoadState("loading")
+    setLoadError("")
+    try {
+      const page = await unwrapResult(window.studio.templates.list({ page: 1, pageSize: 100 }))
+      if (request !== listRequestRef.current) return
+      const records = page.items.map(toTemplateRecord)
+      setTemplates(records)
+      setSelectedId((current) => current && records.some((item) => item.id === current) ? current : records[0]?.id ?? "")
+      setLoadState("ready")
+    } catch (error) {
+      if (request !== listRequestRef.current) return
+      setLoadError(errorMessage(error, "Không thể tải danh sách template."))
+      setLoadState("error")
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadTemplates()
+  }, [loadTemplates])
+
+  const loadTemplateDetail = useCallback(async (id: string) => {
+    if (!id) return
+    const request = ++detailRequestRef.current
+    setDetailState("loading")
+    try {
+      const aggregate = await unwrapResult(window.studio.templates.get({ id }))
+      if (request !== detailRequestRef.current) return
+      setSelectedTemplate(toTemplateRecord(aggregate))
+      setDetailState("ready")
+    } catch {
+      if (request !== detailRequestRef.current) return
+      setSelectedTemplate(null)
+      setDetailState("error")
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!selectedId) {
+      setSelectedTemplate(null)
+      setDetailState("idle")
+      return
+    }
+    void loadTemplateDetail(selectedId)
+  }, [loadTemplateDetail, selectedId])
 
   useEffect(
     () => updateTemplateUrl({ category, detailTab, templateId: selectedId, query, purpose, sorting, status }),
@@ -300,10 +354,9 @@ function TemplatesPage() {
     }
   }, [matchingTemplates, selectedId])
 
-  const selectedTemplate = templates.find((template) => template.id === selectedId) ?? templates[0]!
-  const editingTemplate =
-    authoring?.mode === "edit"
-      ? templates.find((template) => template.id === authoring.templateId) ?? selectedTemplate
+  const editingTemplate: TemplateRecord | undefined =
+    authoring?.mode === "edit" && selectedTemplate && selectedTemplate.id === authoring.templateId
+      ? selectedTemplate
       : undefined
 
   function retryDemoState() {
@@ -311,10 +364,12 @@ function TemplatesPage() {
     const url = new URL(window.location.href)
     url.searchParams.delete("demo")
     window.history.replaceState(null, "", url)
+    void loadTemplates()
   }
 
   function startAuthoring(mode: AuthoringMode, templateId?: string) {
     setSaveNotice("")
+    if (mode === "edit" && templateId) setSelectedId(templateId)
     setAuthoring({ mode, templateId })
     setAuthoringUrl(mode)
   }
@@ -332,6 +387,7 @@ function TemplatesPage() {
         : [template, ...current]
     })
     setSelectedId(template.id)
+    setSelectedTemplate(template)
     setCategory("all")
     setPurpose("all")
     setStatus("all")
@@ -341,6 +397,11 @@ function TemplatesPage() {
   }
 
   if (authoring) {
+    if (authoring.mode === "edit" && !editingTemplate) {
+      return detailState === "error"
+        ? <div className="min-h-screen bg-background px-5 py-6 sm:px-7 lg:px-8 lg:py-7"><ErrorState onRetry={() => void loadTemplateDetail(authoring.templateId ?? "")} /></div>
+        : <div className="min-h-screen bg-background px-5 py-6 sm:px-7 lg:px-8 lg:py-7"><LoadingState /></div>
+    }
     return (
       <TemplateAuthoringPage
         key={`${authoring.mode}-${editingTemplate?.id ?? "new"}`}
@@ -395,13 +456,13 @@ function TemplatesPage() {
             data={demoState === "empty" ? [] : templates}
             getRowId={(template) => template.id}
             getRowLabel={(template) => template.name}
-            activeRowId={selectedTemplate.id}
+            activeRowId={selectedId}
             globalFilter={query}
             filterFn={filterTemplate}
             sorting={sorting}
             onRowClick={(template) => setSelectedId(template.id)}
-            isLoading={demoState === "loading"}
-            error={demoState === "error"}
+            isLoading={demoState === "loading" || loadState === "loading"}
+            error={demoState === "error" || loadState === "error"}
             onRetry={retryDemoState}
             rowActions={(template) => (
               <Button type="button" variant="ghost" size="icon-sm" aria-label={`Chỉnh sửa ${template.name}`} onClick={() => startAuthoring("edit", template.id)}>
@@ -442,12 +503,25 @@ function TemplatesPage() {
         </section>
       </div>
 
-      <TemplateDetail
-        template={selectedTemplate}
-        tab={detailTab}
-        onTabChange={setDetailTab}
-        onEdit={() => startAuthoring("edit", selectedTemplate.id)}
-      />
+      {selectedTemplate && detailState === "ready" ? (
+        <TemplateDetail
+          template={selectedTemplate}
+          tab={detailTab}
+          onTabChange={setDetailTab}
+          onEdit={() => startAuthoring("edit", selectedTemplate.id)}
+        />
+      ) : (
+        <DetailPanel aria-label="Chi tiết template">
+          {detailState === "error" ? (
+            <ErrorState onRetry={() => void loadTemplateDetail(selectedId)} />
+          ) : loadState === "ready" && templates.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <LoadingState />
+          )}
+          {loadError && <p className="sr-only">{loadError}</p>}
+        </DetailPanel>
+      )}
     </div>
   )
 }

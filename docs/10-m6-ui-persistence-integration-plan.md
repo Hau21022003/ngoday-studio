@@ -1,6 +1,6 @@
 # M6 — UI Persistence Integration Plan
 
-- **Status:** Approved ngày 2026-10-24; chưa implement.
+- **Status:** Approved/Completed ngày 2026-10-24; manual acceptance trên ứng dụng thực tế, automated verification và dev/packaged bridge smoke đều PASS.
 - **Prerequisite:** M5A và M5B Approved/Completed ngày 2026-10-24.
 - **Contract source:** `08-m5-domain-persistence-contract.md`.
 - **UI baseline:** M1–M4 đã duyệt; giữ nguyên information architecture, layout, component primitives và interaction chính.
@@ -340,7 +340,7 @@ M6 chỉ được coi là hoàn tất khi đồng thời đạt:
 9. Không có migration/schema diff; `0001_phase1_core.sql` và checksum đã apply không bị sửa.
 10. Không redesign UI; chỉ thay data source và trạng thái kỹ thuật cần thiết.
 11. M5B regression, test M6, production build và Windows packaged restart smoke đều PASS.
-12. Dừng tại checkpoint; không nối Scenes persistence trước khi người dùng duyệt M6.
+12. Đã dừng và được người dùng duyệt tại checkpoint; không nối Scenes persistence trong M6.
 
 ## 14. Rollback
 
@@ -360,4 +360,4 @@ Rollback code M6 dựa trên commit boundary, không dùng down migration:
 2. Cho phép additive `templates.saveEdit` để một thao tác save metadata + version có transaction nguyên tử.
 3. Cho phép typed IPC hẹp cho import/read Episode thumbnail trong workspace; không expose generic filesystem.
 4. Autosave M6 chỉ áp dụng cho Episode notes; các mutation có lifecycle/version vẫn explicit.
-5. Chấp nhận commit split ở mục 2.1. Sau khi implement và verify, phần M6 phải dừng ở checkpoint review trước khi commit/push.
+5. Chấp nhận commit split ở mục 2.1. Implementation M6 đã dừng ở checkpoint review, manual acceptance PASS, và được chốt bằng commit local riêng; không push theo yêu cầu.

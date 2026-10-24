@@ -22,7 +22,7 @@ import {
   getNextVersion,
   purposeLabels,
   statusPresentation,
-  thumbnailByPurpose,
+  toTemplateRecord,
   type Purpose,
   type TemplateRecord,
   type TemplateStatus,
@@ -38,6 +38,7 @@ import { Select } from "@/components/ui/select"
 import { ErrorState, LoadingState } from "@/components/ui/state-feedback"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Textarea } from "@/components/ui/textarea"
+import { StudioClientError, errorMessage, localActorName, unwrapResult } from "@/data/studio-client"
 import { cn } from "@/lib/utils"
 
 type AuthoringMode = "create" | "edit"
@@ -75,9 +76,8 @@ Yêu cầu:
 Định dạng rõ ràng, dễ hiểu, dùng ngôn ngữ tự nhiên,
 gần gũi và phù hợp với phong cách Ngộ Dậy Studio.`
 
-const defaultVariables: TemplateVariableDefinition[] = [
+const defaultVariables: Omit<TemplateVariableDefinition, "id">[] = [
   {
-    id: "draft-topic",
     name: "topic",
     label: "Chủ đề video",
     description: "Chủ đề chính cần triển khai trong kịch bản.",
@@ -87,7 +87,6 @@ const defaultVariables: TemplateVariableDefinition[] = [
     options: [],
   },
   {
-    id: "draft-duration",
     name: "duration",
     label: "Độ dài (phút)",
     description: "Thời lượng mục tiêu của video.",
@@ -97,7 +96,6 @@ const defaultVariables: TemplateVariableDefinition[] = [
     options: [],
   },
   {
-    id: "draft-tone",
     name: "tone",
     label: "Giọng văn",
     description: "Phong cách thể hiện xuyên suốt nội dung.",
@@ -107,7 +105,6 @@ const defaultVariables: TemplateVariableDefinition[] = [
     options: ["Hài hước", "Nghiêm túc", "Gần gũi"],
   },
   {
-    id: "draft-key-points",
     name: "key_points",
     label: "Các ý chính",
     description: "Những ý bắt buộc phải xuất hiện trong kịch bản.",
@@ -133,12 +130,12 @@ function createInitialDraft(mode: AuthoringMode, template?: TemplateRecord): Tem
   }
 
   return {
-    name: "Kịch bản YouTube mới",
-    purpose: "script",
-    description: "Tạo kịch bản chi tiết cho video YouTube với cấu trúc rõ ràng và nhất quán.",
+    name: "Scene Template mới",
+    purpose: "scene",
+    description: "Tạo danh sách Scene có cấu trúc rõ ràng và nhất quán cho một Episode.",
     status: "experimental",
     content: defaultPrompt,
-    variables: cloneVariables(defaultVariables),
+    variables: defaultVariables.map((variable) => ({ ...variable, id: crypto.randomUUID(), options: [...variable.options] })),
     changeNote: "",
   }
 }
@@ -246,17 +243,6 @@ function renderPrompt(content: string, variables: TemplateVariableDefinition[], 
   return content.replace(/{{\s*([a-z][a-z0-9_]*)\s*}}/g, (_, name: string) => byName.get(name) ?? "")
 }
 
-function slugify(value: string) {
-  const normalized = value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("vi")
-    .replace(/đ/g, "d")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-  return normalized || "template-moi"
-}
-
 function TemplateAuthoringPage({
   mode,
   template,
@@ -282,6 +268,8 @@ function TemplateAuthoringPage({
   )
   const [validationVisible, setValidationVisible] = useState(false)
   const [actionError, setActionError] = useState("")
+  const [serverFieldErrors, setServerFieldErrors] = useState<FieldErrors>({})
+  const [saving, setSaving] = useState(false)
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle")
   const [leaveIntent, setLeaveIntent] = useState<LeaveIntent | null>(null)
   const [removedVariable, setRemovedVariable] = useState<{
@@ -308,7 +296,7 @@ function TemplateAuthoringPage({
   const isDirty = draftFingerprint(draft) !== draftFingerprint(initialDraftRef.current)
   const hasUnsavedChanges = mode === "create" || isDirty
   const nextVersion = currentVersion ? getNextVersion(currentVersion.version) : "v1.0"
-  const completionErrors: FieldErrors = { ...sourceValidation.errors }
+  const completionErrors: FieldErrors = { ...sourceValidation.errors, ...serverFieldErrors }
   const normalizedName = draft.name.trim().toLocaleLowerCase("vi")
 
   if (
@@ -376,6 +364,7 @@ function TemplateAuthoringPage({
   function updateDraft<K extends keyof TemplateDraft>(key: K, value: TemplateDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }))
     setActionError("")
+    setServerFieldErrors({})
   }
 
   function updateVariable(id: string, patch: Partial<TemplateVariableDefinition>) {
@@ -383,7 +372,7 @@ function TemplateAuthoringPage({
   }
 
   function addVariable() {
-    const id = `variable-${crypto.randomUUID()}`
+    const id = crypto.randomUUID()
     updateDraft("variables", [
       ...draft.variables,
       {
@@ -445,7 +434,7 @@ function TemplateAuthoringPage({
     })
   }
 
-  function saveTemplate() {
+  async function saveTemplate() {
     if (Object.keys(completionErrors).length > 0) {
       setValidationVisible(true)
       setStep(1)
@@ -457,61 +446,59 @@ function TemplateAuthoringPage({
       return
     }
 
-    const now = new Date().toISOString()
-    if (mode === "create") {
-      const baseId = slugify(draft.name)
-      let id = baseId
-      let suffix = 2
-      while (templates.some((item) => item.id === id)) {
-        id = `${baseId}-${suffix}`
-        suffix += 1
-      }
-      const created: TemplateRecord = {
-        id,
-        name: draft.name.trim(),
-        description: draft.description.trim(),
-        purpose: draft.purpose,
-        status: draft.status,
-        thumbnail: thumbnailByPurpose[draft.purpose],
-        usageCount: 0,
-        createdAt: now,
-        updatedAt: now,
-        createdBy: "Bạn",
-        versions: [{
-          version: "v1.0",
+    setSaving(true)
+    setActionError("")
+    setServerFieldErrors({})
+    try {
+      if (mode === "create") {
+        const aggregate = await unwrapResult(window.studio.templates.create({
+          name: draft.name.trim(),
+          description: draft.description.trim(),
+          purpose: draft.purpose,
+          status: draft.status,
           content: draft.content,
           variables: cloneVariables(draft.variables),
           changeNote: "Khởi tạo template.",
-          createdAt: now,
-          createdBy: "Bạn",
-        }],
+          createdByName: localActorName,
+        }))
+        const created = toTemplateRecord(aggregate)
+        onSave(created, `Đã tạo “${created.name}” ở phiên bản v1.0.`)
+        return
       }
-      onSave(created, `Đã tạo “${created.name}” ở phiên bản v1.0.`)
-      return
-    }
 
-    if (!template || (!versionChanged && !metadataChanged)) return
-    const versions = versionChanged
-      ? [{
-          version: nextVersion,
-          content: draft.content,
-          variables: cloneVariables(draft.variables),
-          changeNote: draft.changeNote.trim(),
-          createdAt: now,
-          createdBy: "Bạn",
-        }, ...template.versions]
-      : template.versions
-    const updated: TemplateRecord = {
-      ...template,
-      name: draft.name.trim(),
-      description: draft.description.trim(),
-      purpose: draft.purpose,
-      status: draft.status,
-      thumbnail: thumbnailByPurpose[draft.purpose],
-      updatedAt: now,
-      versions,
+      if (!template || (!versionChanged && !metadataChanged)) return
+      const aggregate = await unwrapResult(window.studio.templates.saveEdit({
+        id: template.id,
+        expectedRevisionNo: template.revisionNo,
+        ...(metadataChanged
+          ? {
+              patch: {
+                name: draft.name.trim(),
+                description: draft.description.trim(),
+                purpose: draft.purpose,
+                status: draft.status,
+              },
+            }
+          : {}),
+        ...(versionChanged
+          ? {
+              version: {
+                content: draft.content,
+                variables: cloneVariables(draft.variables),
+                changeNote: draft.changeNote.trim(),
+                createdByName: localActorName,
+              },
+            }
+          : {}),
+      }))
+      const updated = toTemplateRecord(aggregate)
+      onSave(updated, versionChanged ? `Đã tạo ${nextVersion} cho “${updated.name}”.` : `Đã cập nhật thông tin “${updated.name}”.`)
+    } catch (error) {
+      if (error instanceof StudioClientError && error.fieldErrors) setServerFieldErrors(error.fieldErrors)
+      setActionError(errorMessage(error, "Không thể lưu template. Nội dung của bạn vẫn được giữ nguyên; hãy thử lại."))
+    } finally {
+      setSaving(false)
     }
-    onSave(updated, versionChanged ? `Đã tạo ${nextVersion} cho “${updated.name}”.` : `Đã cập nhật thông tin “${updated.name}”.`)
   }
 
   function requestCancel() {
@@ -529,11 +516,23 @@ function TemplateAuthoringPage({
   async function copyRenderedPrompt() {
     if (!renderedPrompt) return
     try {
-      await navigator.clipboard.writeText(renderedPrompt)
+      const prompt = mode === "edit" && currentVersion && !versionChanged
+        ? (await unwrapResult(window.studio.templates.render({
+            templateVersionId: currentVersion.id,
+            values: Object.fromEntries(
+              currentVersion.variables.map((variable) => [
+                variable.name,
+                previewValues[variable.id] ?? variable.defaultValue,
+              ]),
+            ),
+          }))).content
+        : renderedPrompt
+      await navigator.clipboard.writeText(prompt)
       setCopyState("copied")
       window.setTimeout(() => setCopyState("idle"), 1800)
-    } catch {
+    } catch (error) {
       setCopyState("error")
+      setActionError(errorMessage(error, "Không thể render hoặc sao chép prompt."))
     }
   }
 
@@ -584,7 +583,7 @@ function TemplateAuthoringPage({
             ) : (
               <>
                 <Button type="button" variant="outline" onClick={() => goToStep(1)}>Quay lại</Button>
-                <Button type="button" variant="accent" disabled={mode === "edit" && !versionChanged && !metadataChanged} onClick={saveTemplate}>Hoàn thành</Button>
+                <Button type="button" variant="accent" disabled={saving || (mode === "edit" && !versionChanged && !metadataChanged)} onClick={() => void saveTemplate()}>{saving ? "Đang lưu…" : "Hoàn thành"}</Button>
               </>
             )}
           </div>
@@ -1386,7 +1385,7 @@ function VariableDefaultField({ variable, onUpdate }: {
 
 function purposeDescription(purpose: Purpose) {
   const descriptions: Record<Purpose, string> = {
-    script: "Tạo kịch bản chi tiết cho video.",
+    scene: "Tạo danh sách Scene có cấu trúc cho Episode.",
     thumbnail: "Phát triển concept và prompt thumbnail.",
     hook: "Tạo hook mở đầu cho nội dung.",
     description: "Soạn mô tả và metadata cho video.",

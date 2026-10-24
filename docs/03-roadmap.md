@@ -47,7 +47,8 @@ Tạo một workflow local đáng tin cậy theo chuỗi `Episode → Scenes →
 - **M4 — Approved làm input cho M5.** Scenes và Assets prototype đã có search/filter/sort, create/import JSON, review/edit/reorder/approve, asset grid/detail và các action mock. Các state/invariant hardening còn lại được chốt bằng M5 contract và triển khai tại M7–M8.
 - **M5A — Approved ngày 2026-10-24.** Domain/schema/migration/repository/typed IPC baseline nằm tại `08-m5-domain-persistence-contract.md`.
 - **M5B — Approved/Completed ngày 2026-10-24.** Persistence foundation đã có migration `0001`, startup/checksum guard, backup safety, repository/service boundary, shared validation, typed preload/IPC và test/package evidence. Checkpoint review PASS sau khi chạy lại `npm run verify` và `npm run package:verify`; UI M1–M4 vẫn dùng mock/in-memory đúng phạm vi.
-- M6–M8 ở trạng thái planned.
+- **M6 — Approved/Completed ngày 2026-10-24.** Template và Episode đã nối SQLite qua typed IPC/preload; manual acceptance trên ứng dụng thực tế xác nhận cả hai luồng lưu thành công. Preload sandbox build CommonJS `.cjs`; dev bridge smoke, automated verify và packaged four-launch service/renderer-bridge restart smoke đều PASS.
+- M7–M8 ở trạng thái planned; chưa triển khai Scene/Asset persistence.
 - Không có milestone database/persistence nào được phép bắt đầu trước khi M4 qua điểm dừng review.
 
 ### M1 — UI Foundation + Templates Browse
@@ -196,7 +197,9 @@ M5A và M5B đã qua điểm dừng review; toàn bộ M5 được duyệt ngày
 
 ### M6 — Templates & Episodes Vertical Slice
 
-**Kế hoạch chi tiết:** `10-m6-ui-persistence-integration-plan.md` — Approved ngày 2026-10-24; chưa implement.
+**Kế hoạch chi tiết:** `10-m6-ui-persistence-integration-plan.md` — Approved/Completed ngày 2026-10-24.
+
+**Implementation evidence:** `11-m6-ui-persistence-integration.md`.
 
 **Phạm vi**
 
@@ -214,7 +217,7 @@ M5A và M5B đã qua điểm dừng review; toàn bộ M5 được duyệt ngày
 
 **Điểm dừng review**
 
-Người dùng kiểm tra một vertical slice bằng dữ liệu thật và duyệt hành vi persistence/error recovery. Không nối Scenes persistence trước khi M6 được duyệt.
+Manual acceptance trên ứng dụng thực tế đã PASS ngày 2026-10-24: Template và Episode lưu thành công qua typed preload/IPC. M6 dừng đúng checkpoint; Scene/Asset persistence vẫn thuộc M7/M8 và chưa được triển khai.
 
 ### M7 — Scenes Vertical Slice
 

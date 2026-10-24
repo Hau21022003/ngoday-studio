@@ -232,6 +232,18 @@ export type CreateTemplateVersionCommand = {
   createdByName: string
 }
 
+export type SaveTemplateEditCommand = {
+  id: EntityId
+  expectedRevisionNo: number
+  patch?: Partial<Pick<Template, "name" | "description" | "purpose" | "status">>
+  version?: {
+    content: string
+    variables: TemplateVariableDefinition[]
+    changeNote: string
+    createdByName: string
+  }
+}
+
 export type RenderTemplateCommand = {
   templateVersionId: EntityId
   values: Record<string, string>
@@ -264,6 +276,22 @@ export type ArchiveEpisodeCommand = {
   id: EntityId
   expectedRevisionNo: number
   updatedByName: string
+}
+
+export type ImportEpisodeThumbnailCommand = {
+  fileName: string
+  mimeType: "image/png" | "image/jpeg" | "image/webp"
+  dataBase64: string
+}
+
+export type ReadEpisodeThumbnailCommand = {
+  relativePath: string
+}
+
+export type EpisodeThumbnailContent = {
+  relativePath: string
+  mimeType: "image/png" | "image/jpeg" | "image/webp"
+  dataUrl: string
 }
 
 export type RenderScenePromptCommand = {

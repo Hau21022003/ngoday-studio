@@ -9,6 +9,7 @@ import type {
   CreateEpisodeCommand,
   CreateTemplateCommand,
   CreateTemplateVersionCommand,
+  EpisodeThumbnailContent,
   Episode,
   EpisodeAggregate,
   EpisodeListQuery,
@@ -16,10 +17,12 @@ import type {
   IpcResult,
   Page,
   RegisterImportedAssetCommand,
+  ReadEpisodeThumbnailCommand,
   RenderedPrompt,
   RenderScenePromptCommand,
   RenderTemplateCommand,
   ReorderScenesCommand,
+  SaveTemplateEditCommand,
   Scene,
   SceneDetail,
   ScenesImportPreview,
@@ -35,6 +38,7 @@ import type {
   UpdateSceneCommand,
   UpdateTemplateCommand,
   ValidateScenesImportCommand,
+  ImportEpisodeThumbnailCommand,
 } from "./domain"
 
 export const studioChannels = {
@@ -43,12 +47,15 @@ export const studioChannels = {
   templatesCreate: "studio:templates:create",
   templatesUpdateMetadata: "studio:templates:update-metadata",
   templatesCreateVersion: "studio:templates:create-version",
+  templatesSaveEdit: "studio:templates:save-edit",
   templatesRender: "studio:templates:render",
   episodesList: "studio:episodes:list",
   episodesGet: "studio:episodes:get",
   episodesCreate: "studio:episodes:create",
   episodesUpdate: "studio:episodes:update",
   episodesArchive: "studio:episodes:archive",
+  episodeThumbnailsImport: "studio:episode-thumbnails:import",
+  episodeThumbnailsRead: "studio:episode-thumbnails:read",
   sceneCreationRenderPrompt: "studio:scene-creation:render-prompt",
   sceneCreationValidateImport: "studio:scene-creation:validate-import",
   sceneCreationCommitImport: "studio:scene-creation:commit-import",
@@ -75,6 +82,7 @@ export interface StudioApi {
     create(input: CreateTemplateCommand): Promise<IpcResult<TemplateAggregate>>
     updateMetadata(input: UpdateTemplateCommand): Promise<IpcResult<Template>>
     createVersion(input: CreateTemplateVersionCommand): Promise<IpcResult<TemplateVersion>>
+    saveEdit(input: SaveTemplateEditCommand): Promise<IpcResult<TemplateAggregate>>
     render(input: RenderTemplateCommand): Promise<IpcResult<RenderedPrompt>>
   }
   episodes: {
@@ -83,6 +91,10 @@ export interface StudioApi {
     create(input: CreateEpisodeCommand): Promise<IpcResult<Episode>>
     update(input: UpdateEpisodeCommand): Promise<IpcResult<Episode>>
     archive(input: ArchiveEpisodeCommand): Promise<IpcResult<Episode>>
+  }
+  episodeThumbnails: {
+    import(input: ImportEpisodeThumbnailCommand): Promise<IpcResult<EpisodeThumbnailContent>>
+    read(input: ReadEpisodeThumbnailCommand): Promise<IpcResult<EpisodeThumbnailContent>>
   }
   sceneCreation: {
     renderPrompt(input: RenderScenePromptCommand): Promise<IpcResult<RenderedPrompt>>

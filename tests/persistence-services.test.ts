@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { sha256 } from "../src/main/domain/helpers"
 import { AssetSlotRepository } from "../src/main/persistence/repositories/asset-slot-repository"
+import { TemplateRepository } from "../src/main/persistence/repositories/template-repository"
 import type { TempFoundation } from "./helpers/temp-foundation"
 import { createTempFoundation } from "./helpers/temp-foundation"
 import { sceneJson, seedEpisode, seedSceneTemplate } from "./helpers/seed"
@@ -19,6 +20,40 @@ afterEach(() => {
 })
 
 describe("persistence services", () => {
+  it("covers persisted Template and Episode CRUD/list/archive flows used by M6", () => {
+    const template = seedSceneTemplate(testContext.foundation)
+    expect(testContext.foundation.services.templates.list({ search: "Scene Template" }).items)
+      .toContainEqual(expect.objectContaining({ id: template.id, currentVersion: { major: 1, minor: 0 } }))
+    const metadata = testContext.foundation.services.templates.updateMetadata({
+      id: template.id,
+      expectedRevisionNo: template.revisionNo,
+      patch: { status: "inactive" },
+    })
+    expect(testContext.foundation.services.templates.get(template.id)).toMatchObject({
+      status: "inactive",
+      revisionNo: metadata.revisionNo,
+    })
+
+    const episode = seedEpisode(testContext.foundation, "Episode CRUD M6")
+    expect(testContext.foundation.services.episodes.list({ search: "CRUD M6" }).items)
+      .toContainEqual(expect.objectContaining({ id: episode.id, workflowStatus: "draft" }))
+    const updated = testContext.foundation.services.episodes.update({
+      id: episode.id,
+      expectedRevisionNo: episode.revisionNo,
+      updatedByName: "Test",
+      patch: { notes: "Ghi chú CRUD" },
+    })
+    const archived = testContext.foundation.services.episodes.archive({
+      id: episode.id,
+      expectedRevisionNo: updated.revisionNo,
+      updatedByName: "Test",
+    })
+    expect(archived.archivedAt).not.toBeNull()
+    expect(testContext.foundation.services.episodes.list({}).items).not.toContainEqual(expect.objectContaining({ id: episode.id }))
+    expect(testContext.foundation.services.episodes.list({ includeArchived: true }).items)
+      .toContainEqual(expect.objectContaining({ id: episode.id, notes: "Ghi chú CRUD" }))
+  })
+
   it("validates the anonymized Scenes v1 fixture used at the import boundary", () => {
     const template = seedSceneTemplate(testContext.foundation)
     const episode = seedEpisode(testContext.foundation)
@@ -58,6 +93,75 @@ describe("persistence services", () => {
         createdByName: "Test",
       }),
     ).toThrowError(expect.objectContaining({ code: "STALE_REVISION" }))
+  })
+
+  it("saves Template metadata and an immutable version atomically", () => {
+    const template = seedSceneTemplate(testContext.foundation)
+    const originalVersion = template.versions[0]!
+    const edited = testContext.foundation.services.templates.saveEdit({
+      id: template.id,
+      expectedRevisionNo: template.revisionNo,
+      patch: { name: "Scene Template đã chỉnh sửa" },
+      version: {
+        content: originalVersion.content.replace("Tạo scenes", "Hãy tạo scenes"),
+        variables: originalVersion.variables,
+        changeNote: "Lưu metadata và version trong cùng transaction.",
+        createdByName: "Test",
+      },
+    })
+
+    expect(edited).toMatchObject({ name: "Scene Template đã chỉnh sửa", revisionNo: 2 })
+    expect(edited.versions).toHaveLength(2)
+    expect(edited.versions[1]).toMatchObject({ id: originalVersion.id, content: originalVersion.content })
+  })
+
+  it("rolls back Template metadata when atomic version append fails", () => {
+    const template = seedSceneTemplate(testContext.foundation)
+    const originalVersion = template.versions[0]!
+    vi.spyOn(TemplateRepository.prototype, "insertVersion").mockImplementationOnce(() => {
+      throw new Error("fixture version failure")
+    })
+
+    expect(() => testContext.foundation.services.templates.saveEdit({
+      id: template.id,
+      expectedRevisionNo: template.revisionNo,
+      patch: { name: "Tên không được commit một phần" },
+      version: {
+        content: originalVersion.content,
+        variables: originalVersion.variables,
+        changeNote: "Kích hoạt rollback transaction.",
+        createdByName: "Test",
+      },
+    })).toThrow("fixture version failure")
+
+    const persisted = testContext.foundation.services.templates.get(template.id)
+    expect(persisted).toMatchObject({ name: template.name, revisionNo: 1 })
+    expect(persisted.versions).toHaveLength(1)
+  })
+
+  it("imports and reads only validated Episode thumbnails inside the workspace", () => {
+    const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0])
+    const imported = testContext.foundation.services.episodeThumbnails.import({
+      fileName: "thumbnail.png",
+      mimeType: "image/png",
+      dataBase64: png.toString("base64"),
+    })
+
+    expect(imported).toMatchObject({ mimeType: "image/png" })
+    expect(imported.relativePath).toMatch(/^thumbnails\/[a-f0-9]{64}\.png$/)
+    expect(testContext.foundation.services.episodeThumbnails.read({ relativePath: imported.relativePath })).toEqual(imported)
+    expect(() => testContext.foundation.services.episodeThumbnails.read({ relativePath: "../outside.png" }))
+      .toThrowError(expect.objectContaining({ code: "FILE_OUTSIDE_WORKSPACE" }))
+    expect(() => testContext.foundation.services.episodeThumbnails.import({
+      fileName: "fake.png",
+      mimeType: "image/png",
+      dataBase64: Buffer.from("not an image").toString("base64"),
+    })).toThrowError(expect.objectContaining({ code: "VALIDATION_ERROR" }))
+    expect(() => testContext.foundation.services.episodeThumbnails.import({
+      fileName: "too-large.png",
+      mimeType: "image/png",
+      dataBase64: Buffer.alloc(5 * 1024 * 1024 + 1).toString("base64"),
+    })).toThrowError(expect.objectContaining({ code: "VALIDATION_ERROR" }))
   })
 
   it("enforces optimistic concurrency on current-state records", () => {

@@ -1,26 +1,21 @@
-import {
-  Atom,
-  BrainCircuit,
-  Cat,
-  Clapperboard,
-  Ellipsis,
-  HeartPulse,
-  Landmark,
-  Lightbulb,
-  MoonStar,
-  Orbit,
-  PawPrint,
-  Plus,
-  Pyramid,
-  ScrollText,
-  type LucideIcon,
-} from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { Clapperboard, Ellipsis, Plus } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
+
+import type { EpisodeTopic, EpisodeWorkflowStatus } from "../../../shared/domain"
 
 import { EpisodeAuthoringPage, type EpisodeAuthoringMode } from "@/components/episode-authoring-page"
+import {
+  thumbnailStyles,
+  toEpisodeRecord,
+  topics,
+  workflowStatuses,
+  type EpisodeRecord,
+  type EpisodeThumbnailKind,
+} from "@/components/episode-data"
 import { EpisodeWorkspacePage, type EpisodeWorkspaceTab } from "@/components/episode-workspace-page"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import {
   DataTable,
   type DataTableColumn,
@@ -30,112 +25,12 @@ import { PageHeader } from "@/components/ui/page-header"
 import { SearchField } from "@/components/ui/search-field"
 import { Select } from "@/components/ui/select"
 import { StateFeedback } from "@/components/ui/state-feedback"
-import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { errorMessage, localActorName, unwrapResult } from "@/data/studio-client"
 import { cn } from "@/lib/utils"
 
-type EpisodeTopic = "animals" | "health" | "history" | "psychology" | "science"
-type EpisodeStatus = "complete" | "idea" | "in-progress" | "script-ready"
-type EpisodeThumbnailKind = "black-hole" | "cat" | "dejavu" | "history" | "pyramid" | "sleep"
 type DemoState = "empty" | "error" | "loading" | "ready"
 type SortOption = "scenes-desc" | "title-asc" | "updated-asc" | "updated-desc"
-
-type EpisodeRecord = {
-  id: string
-  sceneCount: number
-  status: EpisodeStatus
-  thumbnail: EpisodeThumbnailKind
-  title: string
-  topic: EpisodeTopic
-  updatedAt: string
-  updatedBy: string
-}
-
-const topics: Record<EpisodeTopic, { icon: LucideIcon; label: string; tone: "danger" | "info" | "lavender" | "success" }> = {
-  animals: { icon: PawPrint, label: "Động vật", tone: "success" },
-  health: { icon: HeartPulse, label: "Cơ thể", tone: "danger" },
-  history: { icon: Landmark, label: "Lịch sử", tone: "lavender" },
-  psychology: { icon: BrainCircuit, label: "Tâm lý", tone: "danger" },
-  science: { icon: Atom, label: "Khoa học", tone: "info" },
-}
-
-const statuses: Record<EpisodeStatus, { label: string; tone: StatusTone }> = {
-  complete: { label: "Hoàn thành", tone: "success" },
-  idea: { label: "Ý tưởng", tone: "warning" },
-  "in-progress": { label: "Đang làm", tone: "info" },
-  "script-ready": { label: "Kịch bản xong", tone: "success" },
-}
-
-const thumbnailStyles: Record<EpisodeThumbnailKind, { background: string; icon: LucideIcon; ornament: string }> = {
-  "black-hole": { background: "bg-primary", icon: Orbit, ornament: "bg-warning" },
-  cat: { background: "bg-info-soft", icon: Cat, ornament: "bg-info" },
-  dejavu: { background: "bg-primary", icon: BrainCircuit, ornament: "bg-accent" },
-  history: { background: "bg-warning-soft", icon: ScrollText, ornament: "bg-danger" },
-  pyramid: { background: "bg-accent-soft", icon: Pyramid, ornament: "bg-warning" },
-  sleep: { background: "bg-lavender-soft", icon: MoonStar, ornament: "bg-lavender" },
-}
-
-const initialEpisodes: readonly EpisodeRecord[] = [
-  {
-    id: "dejavu",
-    sceneCount: 10,
-    status: "idea",
-    thumbnail: "dejavu",
-    title: "Tại sao có cảm giác Déjà vu?",
-    topic: "psychology",
-    updatedAt: "2026-10-22T14:30:00+07:00",
-    updatedBy: "Nguyễn Văn A",
-  },
-  {
-    id: "history-betrayal",
-    sceneCount: 12,
-    status: "in-progress",
-    thumbnail: "history",
-    title: "Vì sao bị bạn chết vẫn ta ơn?",
-    topic: "history",
-    updatedAt: "2026-10-21T16:20:00+07:00",
-    updatedBy: "Nguyễn Văn A",
-  },
-  {
-    id: "cats-land-on-feet",
-    sceneCount: 8,
-    status: "script-ready",
-    thumbnail: "cat",
-    title: "Tại sao mèo luôn đáp xuống bằng chân?",
-    topic: "animals",
-    updatedAt: "2026-10-20T11:05:00+07:00",
-    updatedBy: "Trần Thị B",
-  },
-  {
-    id: "why-we-dream",
-    sceneCount: 14,
-    status: "complete",
-    thumbnail: "sleep",
-    title: "Tại sao chúng ta lại mơ?",
-    topic: "health",
-    updatedAt: "2026-10-18T09:12:00+07:00",
-    updatedBy: "Nguyễn Văn A",
-  },
-  {
-    id: "black-hole",
-    sceneCount: 11,
-    status: "idea",
-    thumbnail: "black-hole",
-    title: "Hố đen là gì? Tại sao chúng nuốt chửng mọi thứ?",
-    topic: "science",
-    updatedAt: "2026-10-16T20:18:00+07:00",
-    updatedBy: "Lê Minh C",
-  },
-  {
-    id: "pyramid",
-    sceneCount: 15,
-    status: "in-progress",
-    thumbnail: "pyramid",
-    title: "Kim tự tháp được xây như thế nào?",
-    topic: "history",
-    updatedAt: "2026-10-14T13:45:00+07:00",
-    updatedBy: "Nguyễn Văn A",
-  },
-]
 
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
@@ -201,7 +96,7 @@ function getEpisodeWorkspaceHref(tab: EpisodeWorkspaceTab, episodeId: string) {
   return `${window.location.pathname}?${params.toString()}#episodes`
 }
 
-function EpisodeActions({ episode }: { episode: EpisodeRecord }) {
+function EpisodeActions({ episode, onArchive }: { episode: EpisodeRecord; onArchive: () => void }) {
   return (
     <details className="group/actions relative inline-block text-left">
       <summary
@@ -229,18 +124,14 @@ function EpisodeActions({ episode }: { episode: EpisodeRecord }) {
         >
           Chỉnh sửa
         </a>
-        {["Lưu trữ"].map((label) => (
-          <button
-            key={label}
-            type="button"
-            role="menuitem"
-            disabled
-            className="block w-full rounded px-2 py-1.5 text-left text-xs text-muted-foreground disabled:cursor-not-allowed disabled:opacity-55"
-            title="Sẽ được triển khai ở bước M3 tiếp theo"
-          >
-            {label}
-          </button>
-        ))}
+        <button
+          type="button"
+          role="menuitem"
+          className="block w-full rounded px-2 py-1.5 text-left text-xs font-medium text-danger hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+          onClick={onArchive}
+        >
+          Lưu trữ
+        </button>
       </div>
     </details>
   )
@@ -281,10 +172,10 @@ const episodeColumns: readonly DataTableColumn<EpisodeRecord>[] = [
     id: "status",
     header: "Trạng thái",
     width: "16%",
-    searchableValue: (episode) => statuses[episode.status].label,
+    searchableValue: (episode) => workflowStatuses[episode.status].label,
     className: "py-2",
     cell: (episode) => {
-      const status = statuses[episode.status]
+      const status = workflowStatuses[episode.status]
       return <StatusBadge label={status.label} tone={status.tone} />
     },
   },
@@ -343,9 +234,16 @@ function EpisodesPage() {
       ? value
       : null
   })
+  const episodeId = new URLSearchParams(window.location.search).get("episode") ?? undefined
+  const [episodes, setEpisodes] = useState<EpisodeRecord[]>([])
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading")
+  const [archiveCandidate, setArchiveCandidate] = useState<EpisodeRecord | null>(null)
+  const [archiveError, setArchiveError] = useState("")
+  const [archiving, setArchiving] = useState(false)
+  const listRequestRef = useRef(0)
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("episodeQ") ?? "")
-  const [status, setStatus] = useState<"all" | EpisodeStatus>(() =>
-    getSearchParam("episodeStatus", ["all", ...Object.keys(statuses)] as Array<"all" | EpisodeStatus>, "all"),
+  const [status, setStatus] = useState<"all" | EpisodeWorkflowStatus>(() =>
+    getSearchParam("episodeStatus", ["all", ...Object.keys(workflowStatuses)] as Array<"all" | EpisodeWorkflowStatus>, "all"),
   )
   const [topic, setTopic] = useState<"all" | EpisodeTopic>(() =>
     getSearchParam("episodeTopic", ["all", ...Object.keys(topics)] as Array<"all" | EpisodeTopic>, "all"),
@@ -358,6 +256,24 @@ function EpisodesPage() {
     ),
   )
   const [demoState, setDemoState] = useState<DemoState>(getDemoState)
+
+  const loadEpisodes = useCallback(async () => {
+    const request = ++listRequestRef.current
+    setLoadState("loading")
+    try {
+      const page = await unwrapResult(window.studio.episodes.list({ page: 1, pageSize: 100 }))
+      if (request !== listRequestRef.current) return
+      setEpisodes(page.items.map(toEpisodeRecord))
+      setLoadState("ready")
+    } catch {
+      if (request !== listRequestRef.current) return
+      setLoadState("error")
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadEpisodes()
+  }, [loadEpisodes])
 
   useEffect(() => {
     const url = new URL(window.location.href)
@@ -380,14 +296,34 @@ function EpisodesPage() {
     const url = new URL(window.location.href)
     url.searchParams.delete("demo")
     window.history.replaceState(null, "", url)
+    void loadEpisodes()
+  }
+
+  async function archiveEpisode() {
+    if (archiving || !archiveCandidate) return
+    setArchiving(true)
+    setArchiveError("")
+    try {
+      await unwrapResult(window.studio.episodes.archive({
+        id: archiveCandidate.id,
+        expectedRevisionNo: archiveCandidate.revisionNo,
+        updatedByName: localActorName,
+      }))
+      setEpisodes((current) => current.filter((episode) => episode.id !== archiveCandidate.id))
+      setArchiveCandidate(null)
+    } catch (error) {
+      setArchiveError(errorMessage(error, "Không thể lưu trữ Episode."))
+    } finally {
+      setArchiving(false)
+    }
   }
 
   if (authoringMode) {
-    return <EpisodeAuthoringPage mode={authoringMode} />
+    return <EpisodeAuthoringPage mode={authoringMode} episodeId={episodeId} />
   }
 
   if (workspaceTab) {
-    return <EpisodeWorkspacePage initialTab={workspaceTab} />
+    return <EpisodeWorkspacePage initialTab={workspaceTab} episodeId={episodeId} />
   }
 
   return (
@@ -413,14 +349,14 @@ function EpisodesPage() {
         <DataTable
           caption="Danh sách episode video YouTube"
           columns={episodeColumns}
-          data={demoState === "empty" ? [] : initialEpisodes}
+          data={demoState === "empty" ? [] : episodes}
           getRowId={(episode) => episode.id}
           getRowLabel={(episode) => episode.title}
           globalFilter={query}
           filterFn={filterEpisode}
           sorting={sortingFromOption(sort)}
-          isLoading={demoState === "loading"}
-          error={demoState === "error"}
+          isLoading={demoState === "loading" || loadState === "loading"}
+          error={demoState === "error" || loadState === "error"}
           onRetry={retryDemoState}
           tableClassName="min-w-[980px]"
           emptyState={
@@ -430,8 +366,8 @@ function EpisodesPage() {
               description="Thay đổi từ khóa hoặc bộ lọc để xem các episode khác."
             />
           }
-          rowSelection={{ defaultSelectedRowIds: ["dejavu"] }}
-          rowActions={(episode) => <EpisodeActions episode={episode} />}
+          rowSelection={{ defaultSelectedRowIds: episodes[0] ? [episodes[0].id] : [] }}
+          rowActions={(episode) => <EpisodeActions episode={episode} onArchive={() => setArchiveCandidate(episode)} />}
           actionsColumnWidth="72px"
           showActionsHeader
           pagination={{ pageSize: 6, pageSizeOptions: [6], variant: "compact" }}
@@ -452,10 +388,10 @@ function EpisodesPage() {
                 label="Lọc theo trạng thái"
                 name="episode-status"
                 value={status}
-                onChange={(event) => setStatus(event.target.value as "all" | EpisodeStatus)}
+                onChange={(event) => setStatus(event.target.value as "all" | EpisodeWorkflowStatus)}
               >
                 <option value="all">Tất cả trạng thái</option>
-                {(Object.entries(statuses) as Array<[EpisodeStatus, { label: string }]>).map(
+                {(Object.entries(workflowStatuses) as Array<[EpisodeWorkflowStatus, { label: string }]>).map(
                   ([value, presentation]) => (
                     <option key={value} value={value}>{presentation.label}</option>
                   ),
@@ -489,6 +425,16 @@ function EpisodesPage() {
           }
         />
       </section>
+      {archiveError && <p role="alert" className="mt-3 text-xs font-medium text-danger">{archiveError}</p>}
+      <ConfirmDialog
+        open={archiveCandidate !== null}
+        onOpenChange={(open) => { if (!open && !archiving) setArchiveCandidate(null) }}
+        title="Lưu trữ Episode?"
+        description="Episode sẽ ẩn khỏi danh sách mặc định. Scene, Asset và file liên quan không bị xóa."
+        cancelLabel="Hủy"
+        confirmLabel={archiving ? "Đang lưu trữ…" : "Lưu trữ"}
+        onConfirm={() => void archiveEpisode()}
+      />
     </div>
   )
 }
