@@ -198,6 +198,18 @@
 **Decision:** M5B dùng synchronous `node:sqlite` đi kèm Electron 45/Node 24, không đóng gói native addon riêng. Main process là database owner duy nhất; repository/application transaction không `await` bên trong transaction.
 **Consequence:** loại bỏ rủi ro ABI/rebuild của native addon và packaged Windows smoke test đã chạy migration thật thành công. API vẫn được Node đánh dấu experimental, vì vậy upgrade Electron/Node phải chạy lại migration, repository và packaged-runtime test; chỉ đổi driver qua adapter nếu runtime bỏ hoặc thay đổi API không tương thích.
 
+### D-032 — Atomic Template edit qua typed IPC
+
+**Status:** Accepted trong kế hoạch M6 ngày 2026-10-24.
+**Decision:** bổ sung `templates.saveEdit` để một thao tác UI có thể update metadata và append immutable TemplateVersion trong cùng application transaction. Command dùng `expectedRevisionNo`, request/response schema strict và trả aggregate đã commit.
+**Reason:** màn hình đã duyệt có một nút Save cho cả metadata lẫn nội dung version; gọi hai IPC riêng có thể để lại partial commit mà renderer không thể rollback an toàn. Đây là contract additive, không đổi schema hoặc invariant version bất biến.
+
+### D-033 — Episode thumbnail IPC giới hạn trong workspace
+
+**Status:** Accepted trong kế hoạch M6 ngày 2026-10-24.
+**Decision:** bổ sung use case typed IPC hẹp để import/read Episode thumbnail trong workspace. Main validate image/size/path và chỉ trả relative path hoặc nội dung ảnh cần hiển thị; không expose generic filesystem, absolute path hoặc `ipcRenderer`.
+**Reason:** renderer sandbox không thể tự tạo một workspace-relative file đáng tin cậy, trong khi contract cấm blob trong SQLite và absolute path trong dữ liệu Episode.
+
 ## 3. Quyết định Phase 1 đã đóng
 
 ### Q1 — Ý nghĩa hai số trong tên
@@ -315,7 +327,7 @@ Cần chốt backup chỉ gồm metadata hay gồm cả media. Đề xuất hai 
 
 ## 7. Checklist duyệt kế hoạch
 
-M5A và M5B đã Approved/Completed ngày 2026-10-24. D-002–D-007, D-016 và D-022–D-031 đã đóng cho persistence foundation; Q1, Q2, Q3 schema, Q5 và Q6 không còn là câu hỏi mở. Kế hoạch M6 phải được duyệt ở checkpoint riêng trước khi nối renderer vào persistence.
+M5A và M5B đã Approved/Completed ngày 2026-10-24. Kế hoạch M6 đã Approved cùng D-032–D-033 ngày 2026-10-24; implementation chỉ nối Template/Episode và phải dừng checkpoint trước khi commit/push phần M6. D-002–D-007, D-016 và D-022–D-033 đã đóng cho phạm vi hiện tại; Q1, Q2, Q3 schema, Q5 và Q6 không còn là câu hỏi mở.
 
 Các quyết định còn cần trước phase tương ứng:
 

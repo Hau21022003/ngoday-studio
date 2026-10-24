@@ -196,6 +196,8 @@ M5A và M5B đã qua điểm dừng review; toàn bộ M5 được duyệt ngày
 
 ### M6 — Templates & Episodes Vertical Slice
 
+**Kế hoạch chi tiết:** `10-m6-ui-persistence-integration-plan.md` — Approved ngày 2026-10-24; chưa implement.
+
 **Phạm vi**
 
 - Nối UI đã duyệt với repository/IPC cho Template CRUD, immutable version, validation, preview/render và copy.
