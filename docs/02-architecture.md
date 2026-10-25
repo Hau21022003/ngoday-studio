@@ -2,7 +2,7 @@
 
 ## 1. Mục tiêu kiến trúc
 
-- Local-first, hoạt động được với dữ liệu Episode/kịch bản/media khi không có mạng; chỉ phần Flow cần Internet.
+- Local-first, hoạt động được với dữ liệu Episode/Scene/media khi không có mạng; chỉ phần Flow cần Internet.
 - Một desktop app, một database, không backend riêng và không microservice.
 - Tách UI, quyền truy cập hệ thống và automation đủ rõ để giảm rủi ro bảo mật.
 - Queue có thể phục hồi sau crash/restart và không tạo generation trùng ngoài ý muốn.
@@ -26,7 +26,7 @@ flowchart LR
 
 ### Renderer
 
-- React + TypeScript cho Episode list, template editor, script/scene editor, queue, review và media library.
+- React + TypeScript cho Episode list/workspace, template editor, Scenes editor, Assets, queue, review và media library.
 - Không truy cập trực tiếp Node.js, filesystem, SQLite hoặc Playwright.
 - Không giữ trạng thái queue làm nguồn dữ liệu chính; renderer đọc snapshot và nhận event từ main process.
 
@@ -39,7 +39,7 @@ flowchart LR
 ### Electron main / application services
 
 - Sở hữu database, migration, filesystem, dialog chọn folder và lifecycle của browser automation.
-- Chứa use case nghiệp vụ: Episode, Script, Scene, Queue, Review, Media, Export.
+- Chứa use case nghiệp vụ: Episode, Template, Scene, Asset, Queue, Review, Media, Export.
 - Chạy job runner bất đồng bộ trong main ở bản đầu. Chỉ tách worker process nếu PoC chứng minh Playwright làm main process mất ổn định.
 
 ### Flow adapter
@@ -58,7 +58,7 @@ flowchart LR
 | --- | --- | --- |
 | Electron `userData` | `app.db`, settings, migration state, log đã lọc | Có |
 | Profile automation riêng | Cookie/session/cache của Chrome/Chromium | Không đưa vào backup thông thường |
-| Workspace do người dùng chọn | Media gốc, thumbnail local, export, manifest, script export | Có |
+| Workspace do người dùng chọn | Media gốc, thumbnail local, export, manifest, Scenes/narration export | Có |
 | Temp/staging | Download chưa xác minh và artifact tạm | Có thể dọn an toàn khi không còn job |
 
 Đề xuất mặc định trên Windows:
@@ -73,6 +73,8 @@ Không lưu Google password. Cookie/session chỉ tồn tại trong profile brow
 
 SQLite giữ metadata, quan hệ, queue và audit. Binary media nằm trên filesystem; database chỉ lưu path, size, MIME, hash và trạng thái.
 
+Contract Phase 1 cụ thể cho entity, DDL, migration, repository và IPC nằm tại `08-m5-domain-persistence-contract.md`. Nếu phần mô tả định hướng bên dưới khác contract M5, tài liệu M5 là nguồn chuẩn cho schema Phase 1; các field Flow/queue/generation chỉ được thêm bằng migration ở Phase 2.
+
 Thiết lập đề xuất:
 
 - Foreign key bật.
@@ -82,53 +84,64 @@ Thiết lập đề xuất:
 - Path chuẩn hóa theo Windows nhưng manifest export dùng dấu `/` tương đối để dễ di chuyển.
 - Hash SHA-256 cho media đã download và export.
 
-## 4. Data model
+### 3.3. M8 managed Asset files và metadata backup
 
-Tên trường dưới đây là logical schema; kiểu và migration cụ thể chỉ được chốt khi implement.
+- File candidate được người dùng chọn bằng native Electron dialog ở main process. Renderer chỉ gửi AssetSlot ID/revision, không gửi absolute/relative source path, MIME, bytes hoặc hash để database tin tưởng.
+- Main kiểm tra signature/media type, free space khi filesystem cung cấp, copy vào `workspace/assets/{episodeId}/{assetSlotId}/{assetId}/` qua `.partial` + atomic rename và stream SHA-256. Disk-full/partial-copy/transaction error cleanup artifact mới; file nguồn không bị move/xóa/sửa.
+- Integrity `unattached/available/missing/hash_mismatch` được derive bằng path boundary, size và SHA-256. Integrity không ghi đè lifecycle `candidate/accepted/rejected`.
+- Metadata backup v1 là logical JSON strict có checksum, không phải raw SQLite và không thay thế migration backup. Nó chứa Phase 1 metadata nhưng không chứa binary thumbnail/media, credential, browser profile, transient source/rendered prompt hoặc raw import JSON.
+- Restore chỉ vào database business trống, strict-validate toàn bộ trước khi insert transaction; không merge/overwrite/reset. Relative media path được giữ nên restore sang workspace không có binary hiển thị `missing`.
 
-### `episodes`
+## 4. Data model tổng thể
+
+Core Phase 1 chỉ gồm `prompt_templates`, `prompt_template_versions`, `episodes`, `scene_import_batches`, `scenes`, `asset_slots` và `assets`. Không tạo sẵn table cho automation chưa được duyệt. Các subsection về Flow/queue/export bên dưới là hướng mở rộng Phase 2–3, không thuộc migration `0001_phase1_core`.
+
+### `episodes` và extension sau Phase 1
 
 | Trường | Ý nghĩa |
 | --- | --- |
 | `id` | UUID local ổn định |
 | `title`, `topic`, `slug` | Thông tin Episode |
-| `status` | Trạng thái nghiệp vụ |
-| `flow_project_id` | ID nếu quan sát được ổn định; nullable |
-| `flow_project_url` | URL project để mở lại |
-| `flow_project_name` | Tên đã xác minh trên Flow |
-| `settings_json` | Aspect ratio/model/output mặc định đã validate |
+| `archived_at` | Lifecycle archive duy nhất được persist; workflow status được derive từ graph |
+| `flow_project_id`, `flow_project_url`, `flow_project_name` | Deferred sang Phase 2; không có trong schema Phase 1 |
+| `settings_json` | Deferred đến khi generation settings có contract đã duyệt |
 | `created_at`, `updated_at` | UTC timestamp |
 
 ### `prompt_templates` và `prompt_template_versions`
 
 - `prompt_templates`: identity, name, purpose, current version.
-- `prompt_template_versions`: immutable content, biến cho phép, schema/version, thời điểm tạo.
-- Scene/script lưu `template_version_id` và rendered snapshot để thay template sau này không làm thay đổi lịch sử.
+- `prompt_template_versions`: immutable content, variable definitions lưu thành JSON snapshot đã validate, schema/version, hash và thời điểm tạo.
+- Current version được repository lấy theo `(major, minor)` lớn nhất; không lưu pointer vòng giữa hai table.
+- Scene import trỏ tới `scene_import_batches`; batch giữ `template_version_id`, mode và hashes tối thiểu để truy đúng provenance mà không lặp trên từng Scene.
 
-### `scripts` và `script_revisions`
+### Scene creation flow — không có `scripts`
 
-- Một Episode có một script hiện hành và nhiều revision bất biến.
-- Revision giữ raw Markdown/JSON import, nguồn (`manual`, `import`, `llm`) và validation result.
-- Không cần collaborative editing hoặc CRDT.
+- `Script` không phải domain object, module UI, repository hay bảng SQLite trong Phase 1.
+- Flow tạo Scenes nhận metadata Episode, Scene Template version và `Nội dung nguồn` tùy chọn để render prompt cho người dùng copy sang ChatGPT.
+- `Nội dung nguồn`, rendered prompt và raw JSON đang preview là state tạm của flow; không persist nội dung. Sau khi import, một `scene_import_batches` record bất biến giữ TemplateVersion + payload/rendered-prompt hash, còn danh sách Scene có cấu trúc là nguồn dữ liệu chính.
+- Import JSON dùng validation trước transaction; payload sai không tạo Scene nửa chừng.
 
 ### `scenes`
 
 | Trường | Ý nghĩa |
 | --- | --- |
 | `id`, `episode_id` | Identity và owner |
-| `scene_order` | Thứ tự hiện hành, unique trong Episode |
-| `title`, `summary`, `narration` | Nội dung biên tập |
-| `image_prompt`, `video_prompt` | Prompt làm việc hiện hành |
+| `display_order`, `canonical_no` | Thứ tự biên tập có thể đổi và số canonical ổn định |
+| `title`, `summary`, `narration`, `visual_description` | Nội dung biên tập; narration thuộc trực tiếp Scene |
+| `scene_type`, `default_media_type`, `notes` | Contract editor hiện hành |
 | `status` | Draft/review/approved/needs changes |
 | `revision_no` | Optimistic concurrency đơn giản |
+| `source_import_batch_id` | Provenance batch đã tạo Scene; nullable với Scene tạo thủ công |
+| `created_at`, `updated_at` | UTC timestamp |
 
-Nếu cần lịch sử chi tiết từng scene, dùng `scene_revisions` chứa snapshot; không ghi đè revision đã được dùng để generate.
+Phase 1 không có `scene_revisions`. Scene được cập nhật trực tiếp; khi một prompt được dùng để generate media ở Phase 2, `generation_attempts.prompt_snapshot` giữ bằng chứng bất biến của lần tạo đó.
 
 ### `character_references`
 
 - Metadata cho file reference local: tên, path, MIME, hash, thumbnail.
 - Có thể gắn mặc định cho Episode hoặc gắn riêng cho asset slot.
 - Join table giữ thứ tự reference vì UI/model có thể giới hạn số lượng và vai trò.
+- Deferred khỏi migration Phase 1 đầu tiên vì M1–M4 chưa có UI/use case được duyệt; chỉ thêm bằng migration sau khi contract reference được chốt.
 
 ### `asset_slots`
 
@@ -137,13 +150,12 @@ Nếu cần lịch sử chi tiết từng scene, dùng `scene_revisions` chứa 
 | Trường | Ý nghĩa |
 | --- | --- |
 | `id`, `scene_id` | Identity và scene |
-| `asset_order` | Số thứ tự trong scene |
+| `episode_id`, `slot_order` | Episode denormalized có FK kiểm soát và thứ tự slot trong Scene |
 | `canonical_name` | Tên cần có trên Flow và local |
 | `media_type` | `image` hoặc `video` |
-| `required` | Có bắt buộc để hoàn tất Episode không |
-| `accepted_media_version_id` | Candidate được duyệt, nullable |
+| `prompt`, `required`, `status` | Working prompt, mức bắt buộc và `draft/ready/fulfilled` |
 
-Unique constraint đề xuất: `(scene_id, asset_order)` và `canonical_name` trong một Episode.
+Unique constraint: `(scene_id, slot_order)` và `canonical_name` trong một Episode. Candidate/file thực tế nằm ở `assets`; partial unique index giới hạn một Asset accepted cho mỗi slot.
 
 ### `generation_attempts`
 
@@ -159,11 +171,13 @@ Unique constraint đề xuất: `(scene_id, asset_order)` và `canonical_name` t
 - Các trường chính: `flow_project_ref`, `remote_asset_ref`, `observed_name`, `expected_name`, `observed_prompt`, `observed_created_at`, `mapping_confidence`, `rename_verified_at`.
 - Nếu `mapping_confidence` không đạt ngưỡng chắc chắn, automation phải dừng chờ người dùng.
 
-### `media_versions`
+### `assets` Phase 1 và `media_versions` Phase 2+
 
-- Một record cho mỗi file/candidate local.
-- Lưu source Flow asset, path, extension, size, SHA-256, dimensions/duration nếu đọc được, `accepted_at`, `rejected_at`.
-- File accepted không bị ghi đè khi có generation mới.
+- Phase 1 dùng `assets` cho một candidate/file thuộc AssetSlot: lifecycle `candidate/accepted/rejected`, revision, origin, prompt snapshot, path, MIME, size, SHA-256, dimensions/duration và lifecycle timestamps.
+- File integrity `unattached/available/missing/hash_mismatch` được derive khi đọc/preflight; file mất không đổi lifecycle accepted/rejected.
+- Phase 2 có thể mở rộng bằng `generation_attempt_id` hoặc tách read model `media_versions` nếu PoC chứng minh cần thiết; không tạo table trùng nghĩa trước use case.
+- File accepted không bị ghi đè khi có generation mới và thao tác archive metadata không tự động xóa binary.
+- M8 cho phép manual imported candidate, accept/reject/re-accept/archive và kiểm tra integrity qua typed IPC. Physical file dùng thư mục ID riêng; canonical filename/export layout tiếp tục thuộc Phase 3.
 
 ### `jobs` và `job_events`
 
@@ -238,7 +252,7 @@ Không khóa số version trong tài liệu kế hoạch. Khi bắt đầu imple
 - Redux, RxJS, message broker, server database, Docker, Kubernetes.
 - ORM nặng. SQL migration nhỏ và repository rõ ràng là đủ; có thể cân nhắc Drizzle nếu số query tăng đáng kể.
 - FFmpeg trong Phase 1/2. Phase 3 chỉ thêm nếu cần đọc duration/thumbnail mà API hệ điều hành không đủ.
-- SDK LLM trong Phase 1 mặc định; script có thể paste/import trước.
+- SDK LLM trong Phase 1; bản tối thiểu render/copy Scene Template và paste/import JSON Scenes thủ công.
 
 ## 7. Bảo mật
 

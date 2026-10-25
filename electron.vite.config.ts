@@ -1,0 +1,38 @@
+import { resolve } from "node:path"
+import react from "@vitejs/plugin-react"
+import tailwindcss from "@tailwindcss/vite"
+import { defineConfig, externalizeDepsPlugin } from "electron-vite"
+
+import { preloadEntryFileName, preloadModuleFormat } from "./src/shared/runtime-paths"
+
+export default defineConfig({
+  main: {
+    plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        input: resolve(__dirname, "src/main/index.ts"),
+      },
+    },
+  },
+  preload: {
+    plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        input: resolve(__dirname, "src/preload/index.ts"),
+        output: {
+          format: preloadModuleFormat,
+          entryFileNames: preloadEntryFileName,
+        },
+      },
+    },
+  },
+  renderer: {
+    root: resolve(__dirname, "src/renderer"),
+    resolve: {
+      alias: {
+        "@": resolve(__dirname, "src/renderer/src"),
+      },
+    },
+    plugins: [react(), tailwindcss()],
+  },
+})

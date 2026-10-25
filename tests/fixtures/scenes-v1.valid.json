@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "scenes": [
+    {
+      "order": 1,
+      "title": "Mở đầu",
+      "summary": "Giới thiệu nhịp sống buổi sớm.",
+      "narration": "Một buổi sáng yên bình bắt đầu bằng những điều rất nhỏ.",
+      "visualDescription": "Ánh nắng sớm chiếu qua cửa sổ của một căn phòng ấm áp.",
+      "sceneType": "ENVIRONMENT",
+      "mediaType": "image",
+      "notes": "Giữ bảng màu ấm.",
+      "assetSlots": [
+        {
+          "order": 1,
+          "mediaType": "image",
+          "prompt": "Warm morning room, soft sunlight, calm atmosphere",
+          "required": true
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "title": "Giải thích",
+      "summary": "Giải thích ý chính bằng hình ảnh trực quan.",
+      "narration": "Khi ta chậm lại, những chi tiết quen thuộc trở nên rõ ràng hơn.",
+      "visualDescription": "Nhân vật quan sát khu phố, xen kẽ một đồ họa chuyển động tối giản.",
+      "sceneType": "MOTION_GRAPHIC",
+      "mediaType": "video",
+      "notes": "Chuyển động nhẹ, không dùng hiệu ứng dồn dập.",
+      "assetSlots": [
+        {
+          "order": 1,
+          "mediaType": "video",
+          "prompt": "Slow cinematic neighborhood observation, gentle camera movement",
+          "required": true
+        },
+        {
+          "order": 2,
+          "mediaType": "image",
+          "prompt": "Minimal infographic showing attention to everyday details",
+          "required": false
+        }
+      ]
+    }
+  ]
+}

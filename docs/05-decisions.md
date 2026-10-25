@@ -17,39 +17,39 @@
 
 ### D-002 — Local-first, không backend
 
-**Status:** Proposed.  
+**Status:** Accepted trong M5B ngày 2026-10-24.
 **Decision:** SQLite lưu metadata/queue; filesystem lưu media; không server/cloud sync trong ba Phase.  
 **Reason:** phù hợp một người dùng, đơn giản, dễ backup và không phát sinh vận hành backend.
 
 ### D-003 — Electron process boundary
 
-**Status:** Proposed.  
+**Status:** Accepted trong M5B ngày 2026-10-24.
 **Decision:** React renderer chỉ gọi typed IPC qua preload; database, filesystem và Playwright nằm ở main/application layer. `contextIsolation` bật và `nodeIntegration` tắt.  
 **Reason:** giảm quyền của UI và giữ side effect ở một nơi.
 
 ### D-004 — SQLite và binary media
 
-**Status:** Proposed.  
+**Status:** Accepted trong M5B ngày 2026-10-24.
 **Decision:** SQLite không chứa blob media. File nằm trong workspace do người dùng chọn; DB lưu relative path, hash và metadata.  
 **Reason:** database nhỏ, backup/export media rõ ràng và dễ dùng với CapCut.
 
-### D-005 — Cách tạo kịch bản ở Phase 1
+### D-005 — Cách tạo Scenes ở Phase 1
 
-**Status:** Proposed.  
-**Decision:** bản tối thiểu render/copy prompt và cho paste/import kết quả từ ChatGPT; không tự động hóa ChatGPT web. Tích hợp LLM API là tùy chọn sau khi chốt provider/chi phí/secret storage.  
-**Reason:** hoàn thành editor local mà không thêm auth, API cost và dependency chưa cần thiết.
+**Status:** Accepted theo yêu cầu ngày 2026-10-24.
+**Decision:** từ Episode, người dùng chọn Scene Template, render/copy prompt sang ChatGPT thủ công rồi paste hoặc import JSON Scenes. Không tự động hóa ChatGPT web. Tích hợp LLM API là tùy chọn sau khi chốt provider/chi phí/secret storage.
+**Reason:** tạo được Scenes có cấu trúc mà không thêm auth, API cost và dependency chưa cần thiết.
 
 ### D-006 — Version bất biến
 
-**Status:** Proposed.  
-**Decision:** template version, script revision và generation attempt đã sử dụng không bị update đè; thay đổi tạo snapshot/revision mới.  
+**Status:** Accepted trong M5A ngày 2026-10-24.
+**Decision:** template version và generation attempt đã sử dụng không bị update đè; thay đổi tạo snapshot/version mới. Phase 1 không có script revision. Scene hiện hành được cập nhật trực tiếp; generation attempt ở Phase 2 giữ prompt snapshot đã thực sự sử dụng.
 **Reason:** luôn truy được prompt nào sinh ra media nào.
 
-### D-007 — Asset slot và tên canonical
+### D-007 — Asset slot và tên canonical ổn định
 
-**Status:** Proposed.  
-**Decision:** `scene-{sceneOrder:02}-{assetOrder:02}` biểu diễn một output logic; retry/version nằm trong metadata, không nằm trong tên canonical.  
-**Consequence:** reorder scene có thể đổi hàng loạt canonical name nên phải preview và xác nhận.
+**Status:** Accepted trong M5A ngày 2026-10-24.
+**Decision:** `scene-{canonicalNo:02}-{slotOrder:02}` biểu diễn một output logic; retry/version nằm trong metadata, không nằm trong tên canonical. Scene có `displayOrder` riêng để reorder, còn `canonicalNo` được cấp một lần và không đổi.
+**Consequence:** reorder chỉ đổi thứ tự biên tập, không rename Flow/local asset. Phase 1 không xóa riêng Scene. Replace chỉ được phép trước khi graph có Asset và được reset canonical về `1..N`; sau khi có Asset thì replace bị khóa nên canonical đã đưa vào sử dụng không bị tái dùng.
 
 ### D-008 — Human review trước rename/download
 
@@ -103,8 +103,9 @@
 
 ### D-016 — Không tự động xóa trong ba Phase
 
-**Status:** Proposed.  
+**Status:** Accepted trong M5A ngày 2026-10-24.
 **Decision:** rejected asset và source file không bị automation xóa. App có thể đánh dấu/archive; cleanup tự động được deferred.  
+**Consequence:** hard-delete aggregate bị chặn bằng FK `RESTRICT`. Replace asset-free phải xóa Slot → Scene → orphan import batch tường minh trong một transaction; archive không cascade child hoặc binary.
 **Reason:** tránh mất dữ liệu khi mapping/accept sai.
 
 ### D-017 — Export là snapshot bất biến
@@ -119,60 +120,189 @@
 **Decision:** ba Phase đầu hỗ trợ Windows vì path đích, Flow desktop và CapCut workflow hiện tại đều ở Windows. Kiến trúc tránh khóa path không cần thiết nhưng chưa cam kết macOS/Linux.  
 **Reason:** giảm ma trận test/packaging.
 
-## 3. Vấn đề cần người dùng xác nhận trước Phase 1
+### D-019 — Không có Script module/domain object
+
+**Status:** Accepted theo yêu cầu ngày 2026-10-24.
+**Decision:** Phase 1 không có tab/module `Script`, bảng `scripts`, `script_revisions`, repository/IPC Script hoặc bước Script → Scenes. Workflow chuẩn là `Episode → Scenes → Assets`.
+**Consequence:** mọi roadmap, UI contract, data model, backup và acceptance criteria phải tham chiếu trực tiếp Episode/Scene; Workspace hiện hành đã được đồng bộ còn `Overview / Scenes / Assets`.
+
+### D-020 — Narration thuộc Scene
+
+**Status:** Accepted theo yêu cầu ngày 2026-10-24.
+**Decision:** narration/voice-over là field trực tiếp của từng Scene và được review/approve cùng Scene. Không có narration document toàn Episode làm nguồn dữ liệu chính.
+**Consequence:** export narration toàn Episode chỉ là file dẫn xuất từ các Scene theo thứ tự, không phải object có lifecycle riêng.
+
+### D-021 — `Nội dung nguồn` là input tùy chọn, tạm thời
+
+**Status:** Accepted theo yêu cầu ngày 2026-10-24.
+**Decision:** flow `Tạo Scenes` có trường `Nội dung nguồn` tùy chọn để dán outline/kịch bản có sẵn vào Scene Template. Giá trị này chỉ phục vụ render/copy prompt trong phiên; Phase 1 không persistence, revision hoặc backup riêng cho nó.
+**Consequence:** sau import thành công, JSON Scenes đã validate và các Scene được tạo mới là nguồn dữ liệu chính.
+
+### D-022 — Core schema Phase 1 tối thiểu
+
+**Status:** Accepted trong M5A ngày 2026-10-24.
+**Decision:** migration đầu chỉ tạo `prompt_templates`, `prompt_template_versions`, `episodes`, `scene_import_batches`, `scenes`, `asset_slots`, `assets` và `schema_migrations`. `scene_import_batches` chỉ là provenance record tối thiểu; table Flow, generation attempt, queue và export chỉ được thêm ở Phase tương ứng.
+**Reason:** tránh schema speculative và giữ migration đầu truy vết trực tiếp về UI/workflow M1–M4.
+
+### D-023 — Template variables là immutable JSON snapshot
+
+**Status:** Accepted trong M5A ngày 2026-10-24.
+**Decision:** variable definitions nằm trong `prompt_template_versions.variables_json`, được validate/canonicalize trước khi ghi. Current version là version có `(major, minor)` lớn nhất, không lưu pointer vòng; usage count là projection.
+**Reason:** variable contract luôn được dùng cùng prompt content và không cần query/chỉnh sửa độc lập.
+
+### D-024 — Tách AssetSlot và Asset
+
+**Status:** Accepted trong M5A ngày 2026-10-24.
+**Decision:** `AssetSlot` là logical output cần có của Scene với status `draft/ready/fulfilled`; `Asset` là candidate/file thực tế với lifecycle `candidate/accepted/rejected`. Một slot có thể có nhiều candidate nhưng partial unique index giới hạn tối đa một Asset active ở trạng thái `accepted`.
+**Consequence:** working prompt nằm trên slot; prompt thực sự đã dùng được snapshot trên Asset. File `missing/hash_mismatch` là integrity projection riêng và không ghi đè lifecycle Asset. Queue/generation state chỉ thêm cùng job model Phase 2.
+
+### D-025 — JSON Scenes v1 strict và không tin status từ GPT
+
+**Status:** Accepted trong M5A ngày 2026-10-24.
+**Decision:** import dùng envelope `{ schemaVersion: 1, scenes: [...] }`, có thể bóc đúng một outer Markdown JSON fence, reject unknown key và validate toàn payload trước transaction. JSON không nhận ID/status/canonical/timestamp; mọi Scene import bắt đầu `draft`.
+**Consequence:** preview trả payload hash; commit gửi lại raw JSON và hash để main revalidate. Import lỗi rollback toàn bộ provenance batch + Scene + AssetSlot. `append` nối tiếp numbering; `replace` chỉ chạy khi graph chưa từng có Asset và reset numbering `1..N`.
+
+### D-026 — Optimistic concurrency cho current-state entity
+
+**Status:** Accepted trong M5A ngày 2026-10-24.
+**Decision:** Template metadata, Episode, Scene, AssetSlot và Asset có `revision_no`; mutation phải gửi `expectedRevisionNo`. Version/provenance snapshot bất biến không có update.
+**Consequence:** conflict trả `STALE_REVISION`, không last-write-wins. Asset delete trong UI là archive metadata; binary không tự động bị xóa.
+
+### D-027 — Migration forward-only có checksum và backup
+
+**Status:** Accepted trong M5A ngày 2026-10-24.
+**Decision:** SQL migration tuần tự, transactional và không sửa file đã apply; `schema_migrations` lưu checksum. Database có dữ liệu được backup nhất quán trước migration quan trọng; phục hồi bằng backup + forward fix thay vì down migration framework.
+**Reason:** đơn giản, kiểm toán được và phù hợp local single-user.
+
+### D-028 — Typed IPC theo use case
+
+**Status:** Accepted trong M5A ngày 2026-10-24.
+**Decision:** preload expose namespace Template/Episode/Scene creation/Scene/AssetSlot/Asset với request-response schema và `IpcResult<T>`; không expose `ipcRenderer`, SQL, filesystem hoặc generic CRUD.
+**Consequence:** request lẫn response đều validate; business transaction và path trust boundary nằm ở main/application layer.
+
+### D-029 — Provenance tối thiểu cho Scene import
+
+**Status:** Accepted theo yêu cầu ngày 2026-10-24.
+**Decision:** mỗi commit import tạo một `SceneImportBatch` bất biến gồm Episode, TemplateVersion, mode, payload hash, rendered-prompt hash tùy chọn, scene count và timestamp. Scene import trỏ tới batch; Scene tạo thủ công không có batch.
+**Consequence:** truy được lần import và đúng TemplateVersion mà không lặp provenance trên từng Scene. Không có module/repository/IPC CRUD riêng cho batch; không persist rendered prompt, raw JSON hoặc `Nội dung nguồn`.
+
+### D-030 — Episode workflow status là projection
+
+**Status:** Accepted trong M5A ngày 2026-10-24.
+**Decision:** Episode chỉ persist `archived_at`; `draft/scenes_ready/producing/ready_to_export` được derive từ Scene, AssetSlot, Asset và file integrity.
+**Consequence:** database không có Episode workflow-status column có thể lệch graph. List/filter dùng query projection; archive vẫn là mutation có optimistic concurrency.
+
+### D-031 — SQLite driver dùng runtime Electron
+
+**Status:** Accepted cho M5B ngày 2026-10-24.
+**Decision:** M5B dùng synchronous `node:sqlite` đi kèm Electron 45/Node 24, không đóng gói native addon riêng. Main process là database owner duy nhất; repository/application transaction không `await` bên trong transaction.
+**Consequence:** loại bỏ rủi ro ABI/rebuild của native addon và packaged Windows smoke test đã chạy migration thật thành công. API vẫn được Node đánh dấu experimental, vì vậy upgrade Electron/Node phải chạy lại migration, repository và packaged-runtime test; chỉ đổi driver qua adapter nếu runtime bỏ hoặc thay đổi API không tương thích.
+
+### D-032 — Atomic Template edit qua typed IPC
+
+**Status:** Accepted/Implemented trong M6 ngày 2026-10-24; manual acceptance PASS.
+**Decision:** bổ sung `templates.saveEdit` để một thao tác UI có thể update metadata và append immutable TemplateVersion trong cùng application transaction. Command dùng `expectedRevisionNo`, request/response schema strict và trả aggregate đã commit.
+**Revision semantics:** một `saveEdit` thành công làm tăng Template `revision_no` đúng một lần, kể cả khi command chứa cả metadata patch và version mới; toàn bộ thay đổi rollback nếu bất kỳ bước nào lỗi.
+**Reason:** màn hình đã duyệt có một nút Save cho cả metadata lẫn nội dung version; gọi hai IPC riêng có thể để lại partial commit mà renderer không thể rollback an toàn. Đây là contract additive, không đổi schema hoặc invariant version bất biến.
+
+### D-033 — Episode thumbnail IPC giới hạn trong workspace
+
+**Status:** Accepted/Implemented trong M6 ngày 2026-10-24; manual acceptance PASS.
+**Decision:** bổ sung use case typed IPC hẹp để import/read Episode thumbnail trong workspace. Main validate image/size/path và chỉ trả relative path hoặc nội dung ảnh cần hiển thị; không expose generic filesystem, absolute path hoặc `ipcRenderer`.
+**Reason:** renderer sandbox không thể tự tạo một workspace-relative file đáng tin cậy, trong khi contract cấm blob trong SQLite và absolute path trong dữ liệu Episode.
+
+### D-034 — Sandboxed preload dùng CommonJS artifact
+
+**Status:** Accepted/Implemented trong M6 ngày 2026-10-24; dev, packaged bridge smoke và manual acceptance PASS.
+**Decision:** build preload thành CommonJS `index.cjs` và dùng một shared artifact name cho cả build config lẫn `BrowserWindow`. Giữ nguyên `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`; renderer fail-fast nếu typed bridge M6 không tồn tại và không dùng mock/in-memory fallback.
+**Reason:** Electron sandboxed preload không load được bundle ESM `index.mjs` trong cả dev và packaged app (`SyntaxError: Cannot use import statement outside a module`), khiến `contextBridge.exposeInMainWorld` không chạy và `window.studio` là `undefined`.
+
+### D-035 — Scene Template đủ điều kiện và version bất biến trong flow tạo Scenes
+
+**Status:** Accepted/Implemented trong M7 Approved/Completed ngày 2026-10-25; manual acceptance PASS.
+**Decision:** UI chỉ liệt kê Template `purpose=scene`, `status=active`; người dùng chọn một TemplateVersion bất biến cụ thể. Main service kiểm tra lại cả purpose/status cho render, validate và commit thay vì tin dữ liệu renderer.
+**Consequence:** Template archived/experimental hoặc Template purpose khác không thể tạo provenance Scene mới. Import batch luôn trỏ đúng TemplateVersion đã chọn; không đổi schema.
+
+### D-036 — Episode variables tự động và input render tạm thời
+
+**Status:** Accepted/Implemented trong M7 Approved/Completed ngày 2026-10-25; manual acceptance PASS.
+**Decision:** Scene render tự điền các biến chuẩn `episode_title`, `topic`, `notes`, `source_content`; tiếp tục hỗ trợ alias M5B `episode_topic`, `episode_description`. Biến custom được nhập trong flow. `source_content`, custom values, rendered prompt và raw JSON chỉ tồn tại trong phiên renderer.
+**Consequence:** Episode là nguồn dữ liệu chuẩn cho metadata prompt; provenance chỉ giữ hash/TemplateVersion theo D-029, không persist nội dung nhạy cảm hoặc tạo Script object.
+
+### D-037 — Scene dùng explicit save và status transition tách biệt
+
+**Status:** Accepted/Implemented trong M7 Approved/Completed ngày 2026-10-25; manual acceptance PASS.
+**Decision:** Scene editor giữ draft cục bộ và chỉ ghi khi người dùng Save hoặc áp dụng status. Mutation dùng Scene `expectedRevisionNo`; stale/error giữ draft. Sửa content của Scene approved làm Scene về `draft`, còn notes-only giữ approval; chuyển `approved` phải qua validation narration và visual description ở main service.
+**Consequence:** không autosave đè Scene revision, navigation có dirty guard, và renderer không tự quyết định invariant approval.
+
+### D-038 — Structural Scene mutation phối hợp Episode revision
+
+**Status:** Accepted/Implemented trong M7 Approved/Completed ngày 2026-10-25; manual acceptance PASS.
+**Decision:** trước import/reorder, UI chờ Episode notes autosave đang chạy; nếu notes còn lỗi/conflict thì dừng mutation. Sau đó UI lấy Episode aggregate/revision mới nhất và so cấu trúc Scene với snapshot lúc preview/bắt đầu reorder. Main vẫn revalidate payload/hash và dùng optimistic concurrency trong transaction.
+**Consequence:** import/reorder không dùng revision cũ do notes autosave, không âm thầm ghi lên Scene list đã đổi, và stale revision giữ nguyên JSON/order draft để người dùng xử lý. Reorder gửi toàn bộ Scene IDs, chỉ đổi `display_order`; canonical mapping giữ nguyên.
+
+### D-039 — Asset import là managed copy qua native main-process boundary
+
+**Status:** Accepted/Implemented trong M8 Approved/Completed ngày 2026-10-25; automated và manual acceptance PASS.
+**Decision:** renderer chỉ gửi AssetSlot ID/revision. Main mở native picker, kiểm tra file thường/signature/media type/dung lượng, kiểm tra free space khi filesystem hỗ trợ, copy bằng file `.partial` rồi atomic rename, và tự tính bytes/MIME/SHA-256. File nguồn chỉ được đọc, không move/xóa/sửa; archive/reject không xóa managed binary.
+**Consequence:** disk-full/copy/transaction failure cleanup artifact mới của lần import; renderer không thể đưa arbitrary path hoặc metadata giả vào database. File lưu dưới ID riêng; canonical filename cho export vẫn thuộc Phase 3.
+
+### D-040 — Asset lifecycle độc lập file integrity
+
+**Status:** Accepted/Implemented trong M8 Approved/Completed ngày 2026-10-25; automated và manual acceptance PASS.
+**Decision:** lifecycle chỉ có `candidate/accepted/rejected`; integrity `unattached/available/missing/hash_mismatch` là projection kiểm tra lại từ filesystem. Missing/hash mismatch không tự đổi lifecycle. Accept mới atomically reject accepted cũ trong slot; rejected candidate có thể re-accept nếu file available. Cùng SHA-256 trong cùng active slot bị chặn, nhưng được phép ở slot khác.
+**Consequence:** Episode chỉ `ready_to_export` khi required accepted files available. UI luôn hiển thị lifecycle và integrity riêng, có action kiểm tra lại; archive metadata không xóa file.
+
+### D-041 — AssetSlot M8 append-only canonical planning
+
+**Status:** Accepted/Implemented trong M8 Approved/Completed ngày 2026-10-25; automated và manual acceptance PASS.
+**Decision:** UI cho create/update AssetSlot nhưng không delete/reorder; canonical name do main tạo và readonly. Media type không đổi khi còn active candidate; prompt edit không tự reject accepted Asset vì Asset đã giữ `promptSnapshot`. Character reference tiếp tục deferred.
+**Consequence:** migration `0001` giữ nguyên; unique Episode canonical name và one-accepted constraint tiếp tục do DB bảo vệ, service/Zod preflight trả lỗi sớm hơn.
+
+### D-042 — Metadata backup v1 là logical JSON, không chứa binary
+
+**Status:** Accepted/Implemented trong M8 Approved/Completed ngày 2026-10-25; automated và manual acceptance PASS.
+**Decision:** export toàn bộ Phase 1 metadata bằng strict JSON envelope v1 có app/schema/format version và payload SHA-256. Backup gồm Template/Version, Episode, SceneImportBatch, Scene/narration, AssetSlot và Asset metadata; giữ relative path, ID, revision, timestamp và lifecycle. Không gồm thumbnail/media binary, browser profile, credential, rendered prompt, raw JSON hoặc `Nội dung nguồn` tạm.
+**Consequence:** restore ở workspace khác có thể cho integrity `missing` nhưng metadata/lifecycle vẫn nguyên. Migration safety SQLite backup vẫn là cơ chế riêng, không bị đổi nghĩa.
+
+### D-043 — Restore empty-only, transactional và có xác nhận
+
+**Status:** Accepted/Implemented trong M8 Approved/Completed ngày 2026-10-25; automated và manual acceptance PASS.
+**Decision:** Settings ghi rõ backup không có binary và yêu cầu confirm trước native picker. Restore chỉ chạy khi toàn bộ business tables trống; không merge, overwrite, reset hoặc xóa dữ liệu hiện tại. Main strict-validate checksum/reference/duplicate/path/invariant rồi insert toàn bộ trong một transaction và chạy FK/quick check.
+**Consequence:** lỗi restore rollback toàn bộ. UI không có reset database. Full workspace/media backup và relink vẫn là Q13/Q16 Phase 3.
+
+### D-044 — M8 kết thúc Phase 1 nhưng không mở automation/export
+
+**Status:** Accepted/Implemented trong M8 Approved/Completed ngày 2026-10-25; automated và manual acceptance PASS.
+**Decision:** M8 chỉ quản lý manual imported candidates, file integrity, metadata backup/restore và hardening. Asset preview dùng placeholder + open/reveal qua typed IPC; không custom streaming protocol. Các action mock generation/regenerate/media export bị bỏ; Google Flow, Playwright, queue, media export/manifest/CapCut và full workspace backup vẫn ngoài Phase 1.
+**Consequence:** Phase 1 vẫn offline và không thêm dependency/network requirement. Chỉ sau manual pilot/restore PASS mới đổi M8 sang Approved/Completed và bắt đầu Phase 2.
+
+## 3. Quyết định Phase 1 đã đóng
 
 ### Q1 — Ý nghĩa hai số trong tên
 
-Đề xuất hiện tại coi `scene-01-02` là asset thứ 02 thuộc scene 01. Cần xác nhận số thứ hai là:
-
-- Asset/shot thứ tự trong scene; hoặc
-- Version/take retry; hoặc
-- Một ý nghĩa khác trong quy trình hiện tại.
-
-Đây là quyết định ảnh hưởng data model, reorder và export.
+**Đã đóng:** `scene-01-02` là AssetSlot thứ 02 của Scene có `canonicalNo = 01`; số thứ hai không phải version/take. Reorder không đổi tên.
 
 ### Q2 — Loại asset cho mỗi scene
 
-Cần xác nhận một scene thường có:
+**Đã đóng:** một Scene có số AssetSlot tự do; mỗi slot chọn `image` hoặc `video`. Asset là candidate/file con theo D-024.
 
-- Một video duy nhất;
-- Một ảnh + một video;
-- Nhiều shot/clip; hoặc
-- Số lượng tự do theo scene.
+### Q3 — JSON Scenes schema
 
-Đề xuất: asset slot tự do, mỗi slot chọn `image` hoặc `video`.
+**Đã đóng về schema:** contract field nằm tại `08-m5-domain-persistence-contract.md`:
 
-### Q3 — Định dạng script nguồn
+- Bắt buộc: `order`, `title`, `narration`, `visualDescription`, `sceneType`, `mediaType`.
+- Tùy chọn: `summary`, `notes`, `assetSlots`.
 
-Cần một ví dụ kịch bản thực tế đã ẩn thông tin nhạy cảm để chốt field và parser. Đề xuất hỗ trợ:
-
-- Markdown thân thiện để paste/chỉnh sửa.
-- JSON schema để import/export chính xác.
-
-CSV không phải định dạng chính cho script lồng nhiều field.
-
-### Q4 — Tạo kịch bản bằng cách nào
-
-Chọn một mức:
-
-1. Phase 1 chỉ render/copy prompt rồi paste/import kết quả từ ChatGPT.
-2. Gọi OpenAI API trực tiếp bằng API key riêng.
-3. Giữ cả hai, nhưng API integration là milestone sau editor.
-
-Đề xuất mức 1 cho MVP, mức 3 nếu muốn tự động hóa sớm.
+Import Markdown/CSV và parser tách Script → Scenes không thuộc Phase 1. M5B dùng fixture JSON v1 đã ẩn dữ liệu nhạy cảm tại `tests/fixtures/scenes-v1.valid.json` để kiểm thử import boundary.
 
 ### Q5 — Scene approval
 
-Cần xác nhận duyệt ở mức scene đủ hay phải duyệt riêng narration, image prompt và video prompt. Đề xuất một trạng thái scene cùng validation chi tiết; asset slot chỉ queue khi scene approved.
+**Đã đóng:** duyệt một `SceneStatus` cho toàn Scene; narration và visual description là validation chi tiết. Slot chỉ chuyển `ready` khi Scene approved và prompt hợp lệ.
 
 ### Q6 — Reorder sau khi đã generate
 
-Nếu đổi thứ tự scene sau khi asset đã rename/download, có hai lựa chọn:
-
-- Giữ canonical name cũ để mapping bất biến.
-- Renumber toàn bộ Flow/local/export.
-
-Đề xuất khóa số scene sau generation đầu tiên; muốn reorder thì dùng display order riêng hoặc yêu cầu migration có preview.
+**Đã đóng:** `canonicalNo` ổn định, `displayOrder` thay đổi độc lập. Reorder không rename; replace chỉ reset numbering khi graph chưa từng có Asset.
 
 ## 4. Vấn đề cần xác nhận trước Flow PoC
 
@@ -264,13 +394,10 @@ Cần chốt backup chỉ gồm metadata hay gồm cả media. Đề xuất hai 
 
 ## 7. Checklist duyệt kế hoạch
 
-Trước khi implement, cần có câu trả lời tối thiểu cho:
+M5A, M5B và M6 đã Approved/Completed ngày 2026-10-24. M6 chỉ nối Template/Episode; D-032–D-034 đã được implement và manual acceptance PASS. M7 cùng D-035–D-038 đã Approved/Completed ngày 2026-10-25 sau khi implementation, automated/package verification và manual acceptance trên Electron review đều PASS. M8 cùng D-039–D-044 đã Approved/Completed ngày 2026-10-25 sau automated/package verification và manual acceptance trên Electron thực tế; Phase 1 exit gate đã đạt. D-002–D-007, D-016 và D-022–D-044 đã đóng cho phạm vi hiện tại; Q1, Q2, Q3 schema, Q5 và Q6 không còn là câu hỏi mở. Phase 2 chưa bắt đầu.
 
-- Q1: semantics của canonical name.
-- Q2: asset structure mỗi scene.
-- Q3: một sample script và format mong muốn.
-- Q4: manual copy/paste hay LLM API.
-- Q6: quy tắc reorder sau generation.
+Các quyết định còn cần trước phase tương ứng:
+
 - Q7–Q11: account, budget, settings, rename fallback và terms cho PoC.
 - Q13–Q15: workspace/export/CapCut expectation trước Phase 3.
 
