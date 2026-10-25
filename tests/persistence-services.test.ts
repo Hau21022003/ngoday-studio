@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { sha256 } from "../src/main/domain/helpers"
 import { AssetSlotRepository } from "../src/main/persistence/repositories/asset-slot-repository"
 import { TemplateRepository } from "../src/main/persistence/repositories/template-repository"
 import { scenesJsonV1Sample } from "../src/shared/scenes-json-v1-sample"
@@ -471,7 +470,7 @@ describe("persistence services", () => {
     })).toThrowError(expect.objectContaining({ code: "INVALID_TRANSITION" }))
   })
 
-  it("keeps Asset lifecycle accepted when file integrity becomes missing or mismatched", () => {
+  it("keeps Asset lifecycle accepted when file integrity becomes missing or mismatched", async () => {
     const template = seedSceneTemplate(testContext.foundation)
     const episode = seedEpisode(testContext.foundation)
     const rawJson = sceneJson()
@@ -493,19 +492,12 @@ describe("persistence services", () => {
     const mediaDirectory = join(testContext.workspace, "media")
     mkdirSync(mediaDirectory, { recursive: true })
     const mediaPath = join(mediaDirectory, "scene-01-01.png")
-    const bytes = Buffer.from("valid media fixture")
+    const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0, 0, 0, 0, 0])
     writeFileSync(mediaPath, bytes)
-    const candidate = testContext.foundation.services.assets.registerImported({
+    const candidate = await testContext.foundation.services.assets.importFile({
       assetSlotId: slot.id,
       expectedAssetSlotRevisionNo: slot.revisionNo,
-      promptSnapshot: slot.prompt,
-      sourcePath: "media/scene-01-01.png",
-      mimeType: "image/png",
-      bytes: bytes.length,
-      sha256: sha256(bytes),
-      width: 1280,
-      height: 720,
-    })
+    }, mediaPath)
     expect(candidate).toMatchObject({ status: "candidate", fileIntegrity: "available" })
     expect(() =>
       testContext.foundation.services.assets.accept({ id: candidate.id, expectedRevisionNo: 1 }),
@@ -523,14 +515,15 @@ describe("persistence services", () => {
     expect(accepted).toMatchObject({ status: "accepted", fileIntegrity: "available", revisionNo: 2 })
     expect(testContext.foundation.services.episodes.get(episode.id).workflowStatus).toBe("ready_to_export")
 
-    unlinkSync(mediaPath)
+    const managedPath = join(testContext.workspace, candidate.relativePath!)
+    unlinkSync(managedPath)
     expect(testContext.foundation.services.assets.get(candidate.id)).toMatchObject({
       status: "accepted",
       fileIntegrity: "missing",
     })
     expect(testContext.foundation.services.episodes.get(episode.id).workflowStatus).toBe("producing")
 
-    writeFileSync(mediaPath, "different bytes")
+    writeFileSync(managedPath, "different bytes")
     expect(testContext.foundation.services.assets.get(candidate.id)).toMatchObject({
       status: "accepted",
       fileIntegrity: "hash_mismatch",

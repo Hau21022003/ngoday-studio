@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "package:dir": "npm run build && electron-builder --dir --win",
     "package:verify": "npm run package:dir && node scripts/verify-package.mjs",
+    "package": "npm run build && electron-builder --dir --win --config.directories.output=release/m8-verify && node scripts/verify-package.mjs release/m8-verify/win-unpacked",
     "verify": "npm run test && npm run build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"

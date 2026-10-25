@@ -157,8 +157,8 @@ export const assetSlotSchema = z
     episodeId: uuid,
     sceneId: uuid,
     slotOrder: z.number().int().min(1).max(999),
-    canonicalName: z.string(),
-    canonicalNameKey: z.string(),
+    canonicalName: z.string().regex(/^scene-[0-9]{2,}-[0-9]{2,}$/),
+    canonicalNameKey: z.string().regex(/^scene-[0-9]{2,}-[0-9]{2,}$/),
     mediaType: mediaTypeSchema,
     prompt: z.string(),
     required: z.boolean(),
@@ -234,6 +234,7 @@ export const episodeListQuerySchema = z
 export const assetListQuerySchema = z
   .object({
     episodeId: uuid,
+    assetSlotId: uuid.optional(),
     page: pageNumber,
     pageSize,
     search: z.string().max(200).optional(),
@@ -502,19 +503,57 @@ export const updateAssetSlotCommandSchema = z
   })
   .strict()
 
-export const registerImportedAssetCommandSchema = z
+export const importAssetFileCommandSchema = z
   .object({
     assetSlotId: uuid,
     expectedAssetSlotRevisionNo: revision,
-    promptSnapshot: z.string().max(20_000),
-    sourcePath: z.string().min(1).max(1_000),
-    previewSourcePath: z.string().min(1).max(1_000).optional(),
-    mimeType: z.string().trim().min(1).max(160),
-    bytes: z.number().int().min(0),
-    sha256,
-    width: z.number().int().positive().optional(),
-    height: z.number().int().positive().optional(),
-    durationMs: z.number().int().positive().optional(),
+  })
+  .strict()
+
+export const importAssetFileResultSchema = z
+  .object({ cancelled: z.boolean(), asset: assetProjectionSchema.nullable() })
+  .strict()
+
+export const metadataBackupPayloadSchema = z
+  .object({
+    templates: z.array(templateSchema),
+    templateVersions: z.array(templateVersionSchema),
+    episodes: z.array(episodeSchema),
+    sceneImportBatches: z.array(sceneImportBatchSchema),
+    scenes: z.array(sceneSchema),
+    assetSlots: z.array(assetSlotSchema),
+    assets: z.array(assetSchema),
+  })
+  .strict()
+
+export const metadataBackupDocumentSchema = z
+  .object({
+    format: z.literal("ngoday-studio-metadata"),
+    formatVersion: z.literal(1),
+    databaseSchemaVersion: z.literal(1),
+    appVersion: z.string().min(1).max(100),
+    createdAt: utcTimestamp,
+    payloadHash: sha256,
+    payload: metadataBackupPayloadSchema,
+  })
+  .strict()
+
+export const metadataBackupSummarySchema = z
+  .object({
+    templates: z.number().int().min(0),
+    templateVersions: z.number().int().min(0),
+    episodes: z.number().int().min(0),
+    scenes: z.number().int().min(0),
+    assetSlots: z.number().int().min(0),
+    assets: z.number().int().min(0),
+  })
+  .strict()
+
+export const metadataBackupResultSchema = z
+  .object({
+    cancelled: z.boolean(),
+    fileName: z.string().min(1).max(255).nullable(),
+    summary: metadataBackupSummarySchema.nullable(),
   })
   .strict()
 

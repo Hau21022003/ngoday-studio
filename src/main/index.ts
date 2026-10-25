@@ -1,5 +1,14 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron"
-import { readFileSync, writeFileSync } from "node:fs"
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  shell,
+  type IpcMainInvokeEvent,
+  type OpenDialogOptions,
+  type SaveDialogOptions,
+} from "electron"
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { registerStudioIpc } from "./ipc/register-studio-ipc"
@@ -44,7 +53,57 @@ async function createWindow(showOnReady = true) {
 
 let persistence: PersistenceFoundation | null = null
 
-function runPersistenceSmoke(foundation: PersistenceFoundation, smokeRoot: string, phase: string) {
+function parentWindow(event: unknown) {
+  return event && typeof event === "object" && "sender" in event
+    ? BrowserWindow.fromWebContents((event as IpcMainInvokeEvent).sender) ?? undefined
+    : undefined
+}
+
+const platformActions = {
+  async chooseAssetFile(event: unknown) {
+    const options: OpenDialogOptions = {
+      title: "Import Asset candidate",
+      properties: ["openFile"],
+      filters: [
+        { name: "Ảnh và video", extensions: ["png", "jpg", "jpeg", "webp", "mp4", "webm", "mov"] },
+      ],
+    }
+    const parent = parentWindow(event)
+    const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options)
+    return result.canceled ? null : result.filePaths[0] ?? null
+  },
+  async chooseMetadataBackupDestination(event: unknown) {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
+    const options: SaveDialogOptions = {
+      title: "Xuất metadata backup",
+      defaultPath: `ngoday-studio-metadata-${timestamp}.json`,
+      filters: [{ name: "Ngộ Dậy metadata backup", extensions: ["json"] }],
+      properties: ["showOverwriteConfirmation"],
+    }
+    const parent = parentWindow(event)
+    const result = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options)
+    return result.canceled ? null : result.filePath ?? null
+  },
+  async chooseMetadataBackupSource(event: unknown) {
+    const options: OpenDialogOptions = {
+      title: "Chọn metadata backup để restore",
+      properties: ["openFile"],
+      filters: [{ name: "Ngộ Dậy metadata backup", extensions: ["json"] }],
+    }
+    const parent = parentWindow(event)
+    const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options)
+    return result.canceled ? null : result.filePaths[0] ?? null
+  },
+  async openFile(path: string) {
+    const error = await shell.openPath(path)
+    if (error) throw new Error(error)
+  },
+  revealFile(path: string) {
+    shell.showItemInFolder(path)
+  },
+}
+
+async function runPersistenceSmoke(foundation: PersistenceFoundation, smokeRoot: string, phase: string) {
   if (phase === "write") {
     const template = foundation.services.templates.create({
       name: "Packaged restart template",
@@ -56,7 +115,7 @@ function runPersistenceSmoke(foundation: PersistenceFoundation, smokeRoot: strin
       changeNote: "Khởi tạo packaged smoke.",
       createdByName: "Package Verify",
     })
-    const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0])
+    const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0, 0, 0, 0, 0])
     const thumbnail = foundation.services.episodeThumbnails.import({
       fileName: "package-smoke.png",
       mimeType: "image/png",
@@ -70,11 +129,66 @@ function runPersistenceSmoke(foundation: PersistenceFoundation, smokeRoot: strin
       thumbnailRelativePath: thumbnail.relativePath,
       createdByName: "Package Verify",
     })
+    const rawJson = JSON.stringify({
+      schemaVersion: 1,
+      scenes: [{
+        order: 1,
+        title: "Packaged Asset Scene",
+        narration: "Narration packaged smoke.",
+        visualDescription: "Visual packaged smoke.",
+        sceneType: "ENVIRONMENT",
+        mediaType: "image",
+        assetSlots: [{ order: 1, mediaType: "image", prompt: "Packaged asset prompt", required: true }],
+      }],
+    })
+    const preview = foundation.services.sceneCreation.validateImport({
+      episodeId: episode.id,
+      templateVersionId: template.versions[0]!.id,
+      mode: "append",
+      rawJson,
+    })
+    const imported = foundation.services.sceneCreation.commitImport({
+      episodeId: episode.id,
+      templateVersionId: template.versions[0]!.id,
+      mode: "append",
+      rawJson,
+      payloadHash: preview.payloadHash,
+      expectedEpisodeRevisionNo: episode.revisionNo,
+    })
+    foundation.services.scenes.transitionStatus({ id: imported.scenes[0]!.id, expectedRevisionNo: 1, status: "approved" })
+    const sourceAssetPath = join(smokeRoot, "package-asset-source.png")
+    writeFileSync(sourceAssetPath, png)
+    const slot = foundation.services.assetSlots.list(episode.id)[0]!
+    const candidate = await foundation.services.assets.importFile({
+      assetSlotId: slot.id,
+      expectedAssetSlotRevisionNo: slot.revisionNo,
+    }, sourceAssetPath)
+    const accepted = foundation.services.assets.accept({ id: candidate.id, expectedRevisionNo: candidate.revisionNo })
+    const metadataBackupPath = join(smokeRoot, "package-metadata-backup.json")
+    foundation.services.metadataBackup.exportTo(metadataBackupPath)
+
+    const restoreRoot = join(smokeRoot, "metadata-restore-smoke")
+    const restoredFoundation = await initializePersistence({
+      databasePath: join(restoreRoot, "data", "ngoday-studio.sqlite3"),
+      backupDirectory: join(restoreRoot, "backups"),
+      workspaceRoot: join(restoreRoot, "workspace"),
+      appVersion: app.getVersion(),
+    })
+    try {
+      const restored = restoredFoundation.services.metadataBackup.restoreFrom(metadataBackupPath)
+      if (restored.summary.assets !== 1 || restoredFoundation.services.assets.get(accepted.id).fileIntegrity !== "missing") {
+        throw new Error("Packaged metadata restore did not preserve Asset metadata without binary.")
+      }
+    } finally {
+      restoredFoundation.close()
+    }
     writeFileSync(join(smokeRoot, "persistence-smoke-write.json"), JSON.stringify({
       migration: foundation.migration,
       templateId: template.id,
       episodeId: episode.id,
       thumbnailRelativePath: thumbnail.relativePath,
+      assetId: accepted.id,
+      metadataBackupPath,
     }))
     return
   }
@@ -84,16 +198,23 @@ function runPersistenceSmoke(foundation: PersistenceFoundation, smokeRoot: strin
       templateId: string
       episodeId: string
       thumbnailRelativePath: string
+      assetId: string
+      metadataBackupPath: string
     }
     const template = foundation.services.templates.get(fixture.templateId)
     const episode = foundation.services.episodes.get(fixture.episodeId)
     const thumbnail = foundation.services.episodeThumbnails.read({ relativePath: fixture.thumbnailRelativePath })
+    const asset = foundation.services.assets.get(fixture.assetId)
     if (
       template.name !== "Packaged restart template"
       || template.versions.length !== 1
       || episode.notes !== "Packaged restart note"
       || episode.thumbnailRelativePath !== fixture.thumbnailRelativePath
       || !thumbnail.dataUrl.startsWith("data:image/png;base64,")
+      || asset.status !== "accepted"
+      || asset.fileIntegrity !== "available"
+      || episode.workflowStatus !== "ready_to_export"
+      || !existsSync(fixture.metadataBackupPath)
     ) {
       throw new Error("Packaged restart persistence fixture did not survive relaunch.")
     }
@@ -102,6 +223,8 @@ function runPersistenceSmoke(foundation: PersistenceFoundation, smokeRoot: strin
       templateId: template.id,
       episodeId: episode.id,
       thumbnailRelativePath: thumbnail.relativePath,
+      assetId: asset.id,
+      assetIntegrity: asset.fileIntegrity,
     }))
     return
   }
@@ -409,17 +532,17 @@ app.whenReady().then(async () => {
     if (process.env.NGODAY_PERSISTENCE_SMOKE === "1") {
       const phase = process.env.NGODAY_PERSISTENCE_SMOKE_PHASE ?? ""
       if (phase === "bridge-write" || phase === "bridge-read") {
-        registerStudioIpc(ipcMain, persistence)
+        registerStudioIpc(ipcMain, persistence, platformActions)
         await runBridgeSmoke(smokeRoot!, phase)
       } else {
-        runPersistenceSmoke(persistence, smokeRoot!, phase)
+        await runPersistenceSmoke(persistence, smokeRoot!, phase)
       }
       persistence.close()
       persistence = null
       app.exit(0)
       return
     }
-    registerStudioIpc(ipcMain, persistence)
+    registerStudioIpc(ipcMain, persistence, platformActions)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     const smokeRoot = process.env.NGODAY_PERSISTENCE_SMOKE_ROOT

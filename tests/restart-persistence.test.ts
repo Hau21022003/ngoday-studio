@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
@@ -77,6 +77,14 @@ describe("restart persistence", () => {
       })
       foundation.services.scenes.transitionStatus({ id: edited.id, status: "approved", expectedRevisionNo: edited.revisionNo })
       foundation.services.scenes.transitionStatus({ id: imported.scenes[1]!.id, status: "approved", expectedRevisionNo: 1 })
+      const slot = foundation.services.assetSlots.list(episode.id).find((item) => item.sceneId === edited.id)!
+      const sourceAsset = join(root, "restart-asset.png")
+      writeFileSync(sourceAsset, Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0, 0, 0, 0, 0]))
+      const candidate = await foundation.services.assets.importFile({
+        assetSlotId: slot.id,
+        expectedAssetSlotRevisionNo: foundation.services.assetSlots.list(episode.id).find((item) => item.id === slot.id)!.revisionNo,
+      }, sourceAsset)
+      foundation.services.assets.accept({ id: candidate.id, expectedRevisionNo: candidate.revisionNo })
       foundation.services.scenes.reorder({
         episodeId: episode.id,
         orderedSceneIds: [imported.scenes[1]!.id, imported.scenes[0]!.id],
@@ -97,7 +105,7 @@ describe("restart persistence", () => {
         thumbnailRelativePath: thumbnail.relativePath,
         revisionNo: imported.episodeRevisionNo + 1,
         sceneCount: 2,
-        workflowStatus: "scenes_ready",
+        workflowStatus: "producing",
       })
       expect(foundation.services.scenes.list(episode.id).map((scene) => ({
         id: scene.id,
@@ -112,6 +120,10 @@ describe("restart persistence", () => {
         summary: "Summary M7 đã persist",
         assetSlots: [{ canonicalName: "scene-01-01", prompt: "Visual A còn nguyên sau restart." }],
         provenance: { templateVersionId: template.versions[0]!.id },
+      })
+      expect(foundation.services.assets.get(candidate.id)).toMatchObject({
+        status: "accepted",
+        fileIntegrity: "available",
       })
       expect(foundation.services.episodeThumbnails.read({ relativePath: thumbnail.relativePath })).toEqual(thumbnail)
     } finally {

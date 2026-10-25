@@ -12,6 +12,7 @@ import { EpisodeThumbnailService } from "../services/episode-thumbnail-service"
 import { SceneCreationService } from "../services/scene-creation-service"
 import { SceneService } from "../services/scene-service"
 import { TemplateService } from "../services/template-service"
+import { MetadataBackupService } from "../services/metadata-backup-service"
 import { StudioDatabase } from "./database"
 import { migrations } from "./migration-catalog"
 import { runMigrations, type MigrationRunResult } from "./migration-runner"
@@ -27,6 +28,7 @@ export type PersistenceFoundation = {
     scenes: SceneService
     assetSlots: AssetPlanningService
     assets: AssetService
+    metadataBackup: MetadataBackupService
   }
   close(): void
 }
@@ -72,6 +74,7 @@ export async function initializePersistence(options: {
         scenes: new SceneService(database, episodes, scenes, slots, assets),
         assetSlots: new AssetPlanningService(database, scenes, slots, assets),
         assets: assetService,
+        metadataBackup: new MetadataBackupService(database, options.appVersion),
       },
       close: () => database.close(),
     }

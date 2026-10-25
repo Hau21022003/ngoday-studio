@@ -19,6 +19,16 @@ function requireStudioBridge(value: unknown): StudioBridge {
     || typeof candidate.scenes?.reorder !== "function"
     || typeof candidate.scenes?.transitionStatus !== "function"
     || typeof candidate.assetSlots?.list !== "function"
+    || typeof candidate.assetSlots?.create !== "function"
+    || typeof candidate.assetSlots?.update !== "function"
+    || typeof candidate.assets?.list !== "function"
+    || typeof candidate.assets?.importFile !== "function"
+    || typeof candidate.assets?.verifyIntegrity !== "function"
+    || typeof candidate.assets?.accept !== "function"
+    || typeof candidate.assets?.reject !== "function"
+    || typeof candidate.assets?.archive !== "function"
+    || typeof candidate.metadataBackup?.export !== "function"
+    || typeof candidate.metadataBackup?.restore !== "function"
   ) {
     throw new Error("Studio preload bridge không khả dụng. Ứng dụng không thể truy cập persistence an toàn.")
   }

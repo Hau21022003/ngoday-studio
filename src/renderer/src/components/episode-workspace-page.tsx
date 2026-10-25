@@ -6,7 +6,6 @@ import {
   Clapperboard,
   Clock3,
   Copy,
-  Download,
   Ellipsis,
   FileImage,
   FileText,
@@ -255,12 +254,12 @@ function Overview({ episode, thumbnailUrl, notes, autosaveStatus, autosaveError,
 
 function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWorkspaceTab; episodeId?: string }) {
   const [activeTab, setActiveTab] = useState<EpisodeWorkspaceTab>(initialTab)
-  const [assetExportRequest, setAssetExportRequest] = useState(0)
   const [episode, setEpisode] = useState<EpisodeAggregate | null>(null)
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
   const [notes, setNotes] = useState("")
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading")
   const [sceneDirty, setSceneDirty] = useState(false)
+  const [assetDirty, setAssetDirty] = useState(false)
   const [pendingTab, setPendingTab] = useState<EpisodeWorkspaceTab | null>(null)
   const [pendingHref, setPendingHref] = useState<string | null>(null)
   const loadRequest = useRef(0)
@@ -286,8 +285,12 @@ function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWo
         const aggregate = await unwrapResult(window.studio.episodes.get({ id: episodeId }))
         let nextThumbnailUrl: string | null = null
         if (aggregate.thumbnailRelativePath) {
-          const thumbnail = await unwrapResult(window.studio.episodeThumbnails.read({ relativePath: aggregate.thumbnailRelativePath }))
-          nextThumbnailUrl = thumbnail.dataUrl
+          try {
+            const thumbnail = await unwrapResult(window.studio.episodeThumbnails.read({ relativePath: aggregate.thumbnailRelativePath }))
+            nextThumbnailUrl = thumbnail.dataUrl
+          } catch {
+            // Metadata backup intentionally excludes binary thumbnails; keep the Episode usable with the fallback image.
+          }
         }
         if (requestId !== loadRequest.current) return
         setEpisode(aggregate)
@@ -303,14 +306,14 @@ function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWo
   useEffect(loadEpisode, [episodeId])
 
   useEffect(() => {
-    if (!autosave.dirty && !sceneDirty) return
+    if (!autosave.dirty && !sceneDirty && !assetDirty) return
     const handleBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault()
     window.addEventListener("beforeunload", handleBeforeUnload)
     return () => window.removeEventListener("beforeunload", handleBeforeUnload)
-  }, [autosave.dirty, sceneDirty])
+  }, [assetDirty, autosave.dirty, sceneDirty])
 
   useEffect(() => {
-    if (!sceneDirty) return
+    if (!sceneDirty && !assetDirty) return
     const handleAnchorNavigation = (event: globalThis.MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
       const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null
@@ -321,7 +324,7 @@ function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWo
     }
     document.addEventListener("click", handleAnchorNavigation, true)
     return () => document.removeEventListener("click", handleAnchorNavigation, true)
-  }, [sceneDirty])
+  }, [assetDirty, sceneDirty])
 
   async function performTabNavigation(tab: EpisodeWorkspaceTab) {
     await autosave.flush()
@@ -330,7 +333,7 @@ function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWo
   }
 
   function navigateTab(tab: EpisodeWorkspaceTab) {
-    if (activeTab === "scenes" && sceneDirty && tab !== "scenes") {
+    if (((activeTab === "scenes" && sceneDirty) || (activeTab === "assets" && assetDirty)) && tab !== activeTab) {
       setPendingTab(tab)
       return
     }
@@ -338,7 +341,7 @@ function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWo
   }
 
   function guardDirtyNavigation(event: MouseEvent<HTMLAnchorElement>) {
-    if (sceneDirty) {
+    if (sceneDirty || assetDirty) {
       event.preventDefault()
       setPendingHref(event.currentTarget.href)
       return
@@ -405,9 +408,7 @@ function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWo
             </div>
           </div>
           <div className="flex items-center gap-2 self-start xl:self-auto">
-            {activeTab === "assets" ? (
-              <Button type="button" variant="accent" size="lg" onClick={() => setAssetExportRequest((value) => value + 1)}><Download aria-hidden="true" />Xuất media</Button>
-            ) : (
+            {activeTab !== "assets" && (
               <Button asChild variant="accent" size="lg"><a href={episodeEditHref(episode.id)} onClick={guardDirtyNavigation}><Pencil aria-hidden="true" />Chỉnh sửa</a></Button>
             )}
             <WorkspaceMenu />
@@ -441,7 +442,7 @@ function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWo
             refreshEpisode={refreshWorkspaceEpisode}
             onDirtyChange={setSceneDirty}
           />
-        ) : <EpisodeAssetsTab exportRequest={assetExportRequest} />}
+        ) : <EpisodeAssetsTab episode={episode} refreshEpisode={refreshWorkspaceEpisode} onDirtyChange={setAssetDirty} />}
       </main>
     </div>
     <ConfirmDialog
@@ -452,8 +453,8 @@ function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWo
           setPendingHref(null)
         }
       }}
-      title="Bỏ thay đổi Scene chưa lưu?"
-      description="Bản nháp Scene hoặc thứ tự đang chỉnh sẽ bị bỏ khi rời tab Scenes."
+      title="Bỏ thay đổi chưa lưu?"
+      description="Bản nháp Scene hoặc AssetSlot đang chỉnh sẽ bị bỏ khi rời khu vực hiện tại."
       cancelLabel="Tiếp tục chỉnh sửa"
       confirmLabel="Bỏ thay đổi"
       onConfirm={() => {
@@ -462,6 +463,7 @@ function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWo
         setPendingTab(null)
         setPendingHref(null)
         setSceneDirty(false)
+        setAssetDirty(false)
         if (tab) void performTabNavigation(tab)
         else if (href) window.location.assign(href)
       }}

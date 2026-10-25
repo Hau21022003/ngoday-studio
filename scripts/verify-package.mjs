@@ -4,7 +4,8 @@ import { basename, join, resolve, sep } from "node:path"
 import { spawn } from "node:child_process"
 import { DatabaseSync } from "node:sqlite"
 
-const executable = resolve("release", "win-unpacked", "Ngộ Dậy Studio.exe")
+const packageDirectory = process.argv[2] ?? join("release", "win-unpacked")
+const executable = resolve(packageDirectory, "Ngộ Dậy Studio.exe")
 const smokeRoot = mkdtempSync(join(tmpdir(), "ngoday-package-smoke-"))
 
 function runPackagedSmoke(phase) {

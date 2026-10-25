@@ -72,6 +72,10 @@ export class AssetRepository {
     const pageSize = query.pageSize ?? 24
     const conditions = ["slot.episode_id = ?", "asset.archived_at IS NULL"]
     const values: Array<string | number> = [query.episodeId]
+    if (query.assetSlotId) {
+      conditions.push("asset.asset_slot_id = ?")
+      values.push(query.assetSlotId)
+    }
     if (query.search?.trim()) {
       conditions.push("(scene.title LIKE ? ESCAPE '\\' OR slot.canonical_name LIKE ? ESCAPE '\\' OR asset.file_name LIKE ? ESCAPE '\\')")
       const escaped = query.search.trim().replace(/[\\%_]/g, "\\$&")
@@ -107,6 +111,22 @@ export class AssetRepository {
       this.database.connection
         .prepare("SELECT 1 AS found FROM assets WHERE asset_slot_id = ? AND status = 'accepted' AND archived_at IS NULL")
         .get(assetSlotId),
+    )
+  }
+
+  hasActiveForSlot(assetSlotId: string) {
+    return Boolean(
+      this.database.connection
+        .prepare("SELECT 1 AS found FROM assets WHERE asset_slot_id = ? AND archived_at IS NULL LIMIT 1")
+        .get(assetSlotId),
+    )
+  }
+
+  hasActiveHashForSlot(assetSlotId: string, hash: string) {
+    return Boolean(
+      this.database.connection
+        .prepare("SELECT 1 AS found FROM assets WHERE asset_slot_id = ? AND sha256 = ? AND archived_at IS NULL LIMIT 1")
+        .get(assetSlotId, hash),
     )
   }
 

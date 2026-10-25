@@ -49,10 +49,17 @@ export function createStudioBridge(
     assets: {
       list: (input) => invoke(studioChannels.assetsList, input),
       get: (input) => invoke(studioChannels.assetsGet, input),
-      registerImported: (input) => invoke(studioChannels.assetsRegisterImported, input),
+      importFile: (input) => invoke(studioChannels.assetsImportFile, input),
+      verifyIntegrity: (input) => invoke(studioChannels.assetsVerifyIntegrity, input),
+      openFile: (input) => invoke(studioChannels.assetsOpenFile, input),
+      revealFile: (input) => invoke(studioChannels.assetsRevealFile, input),
       accept: (input) => invoke(studioChannels.assetsAccept, input),
       reject: (input) => invoke(studioChannels.assetsReject, input),
       archive: (input) => invoke(studioChannels.assetsArchive, input),
+    },
+    metadataBackup: {
+      export: () => invoke(studioChannels.metadataBackupExport, {}),
+      restore: () => invoke(studioChannels.metadataBackupRestore, {}),
     },
   }
 }

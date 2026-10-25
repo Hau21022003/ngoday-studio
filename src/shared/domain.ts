@@ -199,6 +199,7 @@ export type EpisodeListQuery = {
 
 export type AssetListQuery = {
   episodeId: EntityId
+  assetSlotId?: EntityId
   page?: number
   pageSize?: number
   search?: string
@@ -388,23 +389,54 @@ export type UpdateAssetSlotCommand = {
   patch: Partial<Pick<AssetSlot, "mediaType" | "prompt" | "required">>
 }
 
-export type RegisterImportedAssetCommand = {
+export type ImportAssetFileCommand = {
   assetSlotId: EntityId
   expectedAssetSlotRevisionNo: number
-  promptSnapshot: string
-  sourcePath: string
-  previewSourcePath?: string
-  mimeType: string
-  bytes: number
-  sha256: string
-  width?: number
-  height?: number
-  durationMs?: number
+}
+
+export type ImportAssetFileResult = {
+  cancelled: boolean
+  asset: AssetProjection | null
 }
 
 export type AssetTransitionCommand = {
   id: EntityId
   expectedRevisionNo: number
+}
+
+export type MetadataBackupPayload = {
+  templates: Template[]
+  templateVersions: TemplateVersion[]
+  episodes: Episode[]
+  sceneImportBatches: SceneImportBatch[]
+  scenes: Scene[]
+  assetSlots: AssetSlot[]
+  assets: Asset[]
+}
+
+export type MetadataBackupDocument = {
+  format: "ngoday-studio-metadata"
+  formatVersion: 1
+  databaseSchemaVersion: 1
+  appVersion: string
+  createdAt: UtcTimestamp
+  payloadHash: string
+  payload: MetadataBackupPayload
+}
+
+export type MetadataBackupSummary = {
+  templates: number
+  templateVersions: number
+  episodes: number
+  scenes: number
+  assetSlots: number
+  assets: number
+}
+
+export type MetadataBackupResult = {
+  cancelled: boolean
+  fileName: string | null
+  summary: MetadataBackupSummary | null
 }
 
 export type DomainErrorCode =
@@ -416,6 +448,8 @@ export type DomainErrorCode =
   | "IMPORT_INVALID"
   | "SCENES_REPLACE_CONFLICT"
   | "FILE_OUTSIDE_WORKSPACE"
+  | "FILE_OPERATION_FAILED"
+  | "BACKUP_INVALID"
   | "DB_UNAVAILABLE"
   | "MIGRATION_REQUIRED"
   | "INTERNAL_ERROR"

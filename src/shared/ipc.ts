@@ -16,7 +16,9 @@ import type {
   EpisodeSummary,
   IpcResult,
   Page,
-  RegisterImportedAssetCommand,
+  ImportAssetFileCommand,
+  ImportAssetFileResult,
+  MetadataBackupResult,
   ReadEpisodeThumbnailCommand,
   RenderedPrompt,
   RenderScenePromptCommand,
@@ -69,10 +71,15 @@ export const studioChannels = {
   assetSlotsUpdate: "studio:asset-slots:update",
   assetsList: "studio:assets:list",
   assetsGet: "studio:assets:get",
-  assetsRegisterImported: "studio:assets:register-imported",
+  assetsImportFile: "studio:assets:import-file",
+  assetsVerifyIntegrity: "studio:assets:verify-integrity",
+  assetsOpenFile: "studio:assets:open-file",
+  assetsRevealFile: "studio:assets:reveal-file",
   assetsAccept: "studio:assets:accept",
   assetsReject: "studio:assets:reject",
   assetsArchive: "studio:assets:archive",
+  metadataBackupExport: "studio:metadata-backup:export",
+  metadataBackupRestore: "studio:metadata-backup:restore",
 } as const
 
 export interface StudioApi {
@@ -116,10 +123,17 @@ export interface StudioApi {
   assets: {
     list(input: AssetListQuery): Promise<IpcResult<Page<AssetProjection>>>
     get(input: { id: string }): Promise<IpcResult<AssetProjection>>
-    registerImported(input: RegisterImportedAssetCommand): Promise<IpcResult<AssetProjection>>
+    importFile(input: ImportAssetFileCommand): Promise<IpcResult<ImportAssetFileResult>>
+    verifyIntegrity(input: { id: string }): Promise<IpcResult<AssetProjection>>
+    openFile(input: { id: string }): Promise<IpcResult<{ id: string }>>
+    revealFile(input: { id: string }): Promise<IpcResult<{ id: string }>>
     accept(input: AssetTransitionCommand): Promise<IpcResult<AssetProjection>>
     reject(input: AssetTransitionCommand): Promise<IpcResult<AssetProjection>>
     archive(input: AssetTransitionCommand): Promise<IpcResult<{ id: string }>>
+  }
+  metadataBackup: {
+    export(): Promise<IpcResult<MetadataBackupResult>>
+    restore(): Promise<IpcResult<MetadataBackupResult>>
   }
 }
 

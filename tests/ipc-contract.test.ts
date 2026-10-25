@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { z } from "zod"
+import { writeFileSync } from "node:fs"
+import { join } from "node:path"
 
 import {
   registerStudioIpc,
@@ -150,6 +152,59 @@ describe("typed IPC boundary", () => {
       mode: "append",
       rawJson: JSON.stringify({ schemaVersion: 1, scenes: [{ order: 1, title: "Bad", status: "approved" }] }),
     })).resolves.toMatchObject({ ok: false, error: { code: "IMPORT_INVALID" } })
+  })
+
+  it("keeps M8 file paths in main and exposes validated Asset and backup use cases", async () => {
+    const template = seedSceneTemplate(testContext.foundation)
+    const episode = seedEpisode(testContext.foundation, "Episode IPC M8")
+    const rawJson = sceneJson("Asset IPC")
+    const preview = testContext.foundation.services.sceneCreation.validateImport({
+      episodeId: episode.id,
+      templateVersionId: template.versions[0]!.id,
+      mode: "append",
+      rawJson,
+    })
+    const imported = testContext.foundation.services.sceneCreation.commitImport({
+      episodeId: episode.id,
+      templateVersionId: template.versions[0]!.id,
+      mode: "append",
+      rawJson,
+      payloadHash: preview.payloadHash,
+      expectedEpisodeRevisionNo: episode.revisionNo,
+    })
+    testContext.foundation.services.scenes.transitionStatus({ id: imported.scenes[0]!.id, expectedRevisionNo: 1, status: "approved" })
+    const slot = testContext.foundation.services.assetSlots.list(episode.id)[0]!
+    const sourcePath = join(testContext.root, "ipc-asset.png")
+    const backupPath = join(testContext.root, "ipc-backup.json")
+    writeFileSync(sourcePath, Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0, 0, 0, 0, 0]))
+    const opened: string[] = []
+    const revealed: string[] = []
+    registerStudioIpc(registrar, testContext.foundation, {
+      chooseAssetFile: async () => sourcePath,
+      chooseMetadataBackupDestination: async () => backupPath,
+      chooseMetadataBackupSource: async () => null,
+      openFile: async (path) => { opened.push(path) },
+      revealFile: (path) => { revealed.push(path) },
+    })
+
+    await expect(registrar.invoke(studioChannels.assetsImportFile, {
+      assetSlotId: slot.id,
+      expectedAssetSlotRevisionNo: slot.revisionNo,
+      sourcePath: "renderer-must-not-send-this.png",
+    })).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION_ERROR" } })
+    const importedAsset = await registrar.invoke(studioChannels.assetsImportFile, {
+      assetSlotId: slot.id,
+      expectedAssetSlotRevisionNo: slot.revisionNo,
+    }) as { ok: true; data: { asset: { id: string; fileIntegrity: string } } }
+    expect(importedAsset).toMatchObject({ ok: true, data: { cancelled: false, asset: { fileIntegrity: "available" } } })
+    await expect(registrar.invoke(studioChannels.assetsVerifyIntegrity, { id: importedAsset.data.asset.id }))
+      .resolves.toMatchObject({ ok: true, data: { status: "candidate", fileIntegrity: "available" } })
+    await registrar.invoke(studioChannels.assetsOpenFile, { id: importedAsset.data.asset.id })
+    await registrar.invoke(studioChannels.assetsRevealFile, { id: importedAsset.data.asset.id })
+    expect(opened).toHaveLength(1)
+    expect(revealed).toEqual(opened)
+    await expect(registrar.invoke(studioChannels.metadataBackupExport, {}))
+      .resolves.toMatchObject({ ok: true, data: { cancelled: false, fileName: "ipc-backup.json", summary: { assets: 1 } } })
   })
 
   it("maps optimistic concurrency conflicts to a typed IPC error without overwriting data", async () => {

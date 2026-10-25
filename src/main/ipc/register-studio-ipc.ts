@@ -20,7 +20,9 @@ import {
   idCommandSchema,
   importEpisodeThumbnailCommandSchema,
   pageSchema,
-  registerImportedAssetCommandSchema,
+  importAssetFileCommandSchema,
+  importAssetFileResultSchema,
+  metadataBackupResultSchema,
   renderedPromptSchema,
   readEpisodeThumbnailCommandSchema,
   renderScenePromptCommandSchema,
@@ -52,6 +54,14 @@ export type IpcRegistrar = {
   handle(channel: string, listener: (event: unknown, input: unknown) => unknown): void
 }
 
+export type StudioPlatformActions = {
+  chooseAssetFile(event: unknown): Promise<string | null>
+  chooseMetadataBackupDestination(event: unknown): Promise<string | null>
+  chooseMetadataBackupSource(event: unknown): Promise<string | null>
+  openFile(path: string): Promise<void>
+  revealFile(path: string): void
+}
+
 function fieldErrors(error: ZodError) {
   return Object.fromEntries(error.issues.map((issue) => [issue.path.join(".") || "root", issue.message]))
 }
@@ -81,9 +91,9 @@ export function registerValidatedHandler<I, O>(
   channel: string,
   inputSchema: ZodType<I>,
   outputSchema: ZodType<O>,
-  handler: (input: I) => O | Promise<O>,
+  handler: (input: I, event: unknown) => O | Promise<O>,
 ) {
-  registrar.handle(channel, async (_event, rawInput) => {
+  registrar.handle(channel, async (event, rawInput) => {
     let input: I
     try {
       input = inputSchema.parse(rawInput)
@@ -91,7 +101,7 @@ export function registerValidatedHandler<I, O>(
       return toIpcError(error)
     }
     try {
-      const output = await handler(input)
+      const output = await handler(input, event)
       const parsedOutput = outputSchema.safeParse(output)
       if (!parsedOutput.success) {
         return {
@@ -110,7 +120,11 @@ export function registerValidatedHandler<I, O>(
   })
 }
 
-export function registerStudioIpc(registrar: IpcRegistrar, foundation: PersistenceFoundation) {
+export function registerStudioIpc(
+  registrar: IpcRegistrar,
+  foundation: PersistenceFoundation,
+  platformActions?: StudioPlatformActions,
+) {
   const { services } = foundation
   registerValidatedHandler(registrar, studioChannels.templatesList, templateListQuerySchema, pageSchema(templateSummarySchema), (input) => services.templates.list(input))
   registerValidatedHandler(registrar, studioChannels.templatesGet, idCommandSchema, templateAggregateSchema, ({ id }) => services.templates.get(id))
@@ -145,8 +159,38 @@ export function registerStudioIpc(registrar: IpcRegistrar, foundation: Persisten
 
   registerValidatedHandler(registrar, studioChannels.assetsList, assetListQuerySchema, pageSchema(assetProjectionSchema), (input) => services.assets.list(input))
   registerValidatedHandler(registrar, studioChannels.assetsGet, idCommandSchema, assetProjectionSchema, ({ id }) => services.assets.get(id))
-  registerValidatedHandler(registrar, studioChannels.assetsRegisterImported, registerImportedAssetCommandSchema, assetProjectionSchema, (input) => services.assets.registerImported(input))
+  registerValidatedHandler(registrar, studioChannels.assetsImportFile, importAssetFileCommandSchema, importAssetFileResultSchema, async (input, event) => {
+    if (!platformActions) throw new DomainError("INTERNAL_ERROR", "Native file picker chưa được cấu hình.")
+    const sourcePath = await platformActions.chooseAssetFile(event)
+    if (!sourcePath) return { cancelled: true, asset: null }
+    return { cancelled: false, asset: await services.assets.importFile(input, sourcePath) }
+  })
+  registerValidatedHandler(registrar, studioChannels.assetsVerifyIntegrity, idCommandSchema, assetProjectionSchema, ({ id }) => services.assets.verifyIntegrity(id))
+  registerValidatedHandler(registrar, studioChannels.assetsOpenFile, idCommandSchema, idCommandSchema, async ({ id }) => {
+    if (!platformActions) throw new DomainError("INTERNAL_ERROR", "Native shell action chưa được cấu hình.")
+    await platformActions.openFile(services.assets.registeredFilePath(id))
+    return { id }
+  })
+  registerValidatedHandler(registrar, studioChannels.assetsRevealFile, idCommandSchema, idCommandSchema, ({ id }) => {
+    if (!platformActions) throw new DomainError("INTERNAL_ERROR", "Native shell action chưa được cấu hình.")
+    platformActions.revealFile(services.assets.registeredFilePath(id))
+    return { id }
+  })
   registerValidatedHandler(registrar, studioChannels.assetsAccept, assetTransitionCommandSchema, assetProjectionSchema, (input) => services.assets.accept(input))
   registerValidatedHandler(registrar, studioChannels.assetsReject, assetTransitionCommandSchema, assetProjectionSchema, (input) => services.assets.reject(input))
   registerValidatedHandler(registrar, studioChannels.assetsArchive, assetTransitionCommandSchema, idCommandSchema, (input) => services.assets.archive(input))
+
+  const emptyInput = z.object({}).strict()
+  registerValidatedHandler(registrar, studioChannels.metadataBackupExport, emptyInput, metadataBackupResultSchema, async (_input, event) => {
+    if (!platformActions) throw new DomainError("INTERNAL_ERROR", "Native backup dialog chưa được cấu hình.")
+    const destination = await platformActions.chooseMetadataBackupDestination(event)
+    if (!destination) return { cancelled: true, fileName: null, summary: null }
+    return { cancelled: false, ...services.metadataBackup.exportTo(destination) }
+  })
+  registerValidatedHandler(registrar, studioChannels.metadataBackupRestore, emptyInput, metadataBackupResultSchema, async (_input, event) => {
+    if (!platformActions) throw new DomainError("INTERNAL_ERROR", "Native restore dialog chưa được cấu hình.")
+    const source = await platformActions.chooseMetadataBackupSource(event)
+    if (!source) return { cancelled: true, fileName: null, summary: null }
+    return { cancelled: false, ...services.metadataBackup.restoreFrom(source) }
+  })
 }

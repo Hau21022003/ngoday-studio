@@ -49,7 +49,8 @@ Tạo một workflow local đáng tin cậy theo chuỗi `Episode → Scenes →
 - **M5B — Approved/Completed ngày 2026-10-24.** Persistence foundation đã có migration `0001`, startup/checksum guard, backup safety, repository/service boundary, shared validation, typed preload/IPC và test/package evidence. Checkpoint review PASS sau khi chạy lại `npm run verify` và `npm run package:verify`; UI M1–M4 vẫn dùng mock/in-memory đúng phạm vi.
 - **M6 — Approved/Completed ngày 2026-10-24.** Template và Episode đã nối SQLite qua typed IPC/preload; manual acceptance trên ứng dụng thực tế xác nhận cả hai luồng lưu thành công. Preload sandbox build CommonJS `.cjs`; dev bridge smoke, automated verify và packaged four-launch service/renderer-bridge restart smoke đều PASS.
 - **M7 — Approved/Completed ngày 2026-10-25.** Scenes UI đã nối persistence/typed IPC cho render/copy prompt, strict JSON preview/import, edit, reorder và approval. Automated verification, packaged restart smoke và manual acceptance trên Electron review đều PASS với JSON thực tế gồm 26 Scenes/26 AssetSlots; evidence tại `12-m7-scenes-vertical-slice.md`.
-- M8 vẫn ở trạng thái planned; AssetSlot trong M7 chỉ được hiển thị read-only để kiểm tra mapping import, chưa có Asset planning/persistence UI hoặc Phase 1 hardening.
+- **M8 — Approved/Completed ngày 2026-10-25.** Asset planning/candidate lifecycle, managed file import/integrity, metadata backup/empty-only restore, full regression và packaged smoke đã triển khai không đổi migration `0001`. Manual acceptance trên Electron thực tế PASS, gồm restart persistence, backup/restore và regression M1–M7; evidence tại `13-m8-assets-phase1-hardening.md`.
+- **Phase 1 — Approved/Completed ngày 2026-10-25.** Toàn bộ M1–M8, data model, naming, JSON Scenes v1, offline Episode → Scenes → Assets workflow và metadata restore exit gate đều PASS. Phase 2 chưa bắt đầu.
 - Không có milestone database/persistence nào được phép bắt đầu trước khi M4 qua điểm dừng review.
 
 ### M1 — UI Foundation + Templates Browse
@@ -243,9 +244,11 @@ Manual acceptance trên ứng dụng thực tế đã PASS ngày 2026-10-24: Tem
 
 **Điểm dừng review**
 
-Manual acceptance đã PASS ngày 2026-10-25 trên Electron review với JSON thực tế 26 Scenes/26 AssetSlots, gồm import, edit/save/status, approval validation + automatic demotion, dirty guard, reorder/canonical stability, restart persistence và regression M6. M7 dừng tại checkpoint Approved/Completed; M8 chưa bắt đầu.
+Manual acceptance đã PASS ngày 2026-10-25 trên Electron review với JSON thực tế 26 Scenes/26 AssetSlots, gồm import, edit/save/status, approval validation + automatic demotion, dirty guard, reorder/canonical stability, restart persistence và regression M6. M7 đã đóng tại checkpoint Approved/Completed trước khi công việc M8 bắt đầu.
 
 ### M8 — Asset Planning & Phase 1 Hardening
+
+**Status:** Approved/Completed ngày 2026-10-25; automated/package verification và manual acceptance trên Electron thực tế PASS.
 
 **Phạm vi**
 
@@ -264,7 +267,7 @@ Manual acceptance đã PASS ngày 2026-10-25 trên Electron review với JSON th
 
 **Điểm dừng review**
 
-Người dùng chạy pilot một Episode, duyệt kết quả restore và test report. Chỉ khi M8 được duyệt mới xem Phase 1 hoàn tất và chuyển sang Phase 2.
+Người dùng đã chạy pilot trên Electron thực tế và xác nhận AssetSlot, file import, accept/reject/archive, integrity, restart persistence, metadata backup/restore và regression M1–M7 đều PASS. M8 và Phase 1 được đánh dấu Approved/Completed; Phase 2 chỉ bắt đầu theo yêu cầu riêng sau checkpoint này.
 
 ### Ngoài phạm vi Phase 1
 
@@ -298,7 +301,7 @@ Người dùng chạy pilot một Episode, duyệt kết quả restore và test 
 
 ### Exit gate
 
-Tất cả điểm dừng M1–M8 đã được người dùng duyệt; data model, naming convention, JSON Scenes schema, UI flow và backup/restore có bằng chứng kiểm thử. Sau đó mới thực hiện Phase 2.
+**Đã đạt ngày 2026-10-25.** Tất cả điểm dừng M1–M8 đã được người dùng duyệt; data model, naming convention, JSON Scenes schema, UI flow và backup/restore có automated/package evidence cùng manual acceptance. Phase 1 hoàn tất; Phase 2 chưa được triển khai.
 
 ## 3. Phase 2 — Google Flow Automation bằng Playwright
 

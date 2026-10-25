@@ -11,7 +11,7 @@ describe("preload bridge regression", () => {
     expect(preloadEntryFileName).toBe("index.cjs")
   })
 
-  it("exposes the M6 and M7 use cases on one typed bridge", async () => {
+  it("exposes the M6-M8 use cases on one typed bridge", async () => {
     const invoke = vi.fn(async () => ({ ok: true, data: null })) as unknown as StudioInvoke
     const bridge = createStudioBridge(invoke, {
       platform: "win32",
@@ -34,6 +34,12 @@ describe("preload bridge regression", () => {
     await bridge.scenes.reorder({ episodeId: templateId, orderedSceneIds: [templateId], expectedEpisodeRevisionNo: 1 })
     await bridge.scenes.transitionStatus({ id: templateId, status: "approved", expectedRevisionNo: 1 })
     await bridge.assetSlots.list({ episodeId: templateId })
+    await bridge.assets.importFile({ assetSlotId: templateId, expectedAssetSlotRevisionNo: 1 })
+    await bridge.assets.verifyIntegrity({ id: templateId })
+    await bridge.assets.openFile({ id: templateId })
+    await bridge.assets.revealFile({ id: templateId })
+    await bridge.metadataBackup.export()
+    await bridge.metadataBackup.restore()
 
     expect(invoke.mock.calls.map(([channel]) => channel)).toEqual([
       studioChannels.templatesList,
@@ -50,6 +56,12 @@ describe("preload bridge regression", () => {
       studioChannels.scenesReorder,
       studioChannels.scenesTransitionStatus,
       studioChannels.assetSlotsList,
+      studioChannels.assetsImportFile,
+      studioChannels.assetsVerifyIntegrity,
+      studioChannels.assetsOpenFile,
+      studioChannels.assetsRevealFile,
+      studioChannels.metadataBackupExport,
+      studioChannels.metadataBackupRestore,
     ])
   })
 

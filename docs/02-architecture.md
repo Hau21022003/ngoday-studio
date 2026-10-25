@@ -84,6 +84,14 @@ Thiết lập đề xuất:
 - Path chuẩn hóa theo Windows nhưng manifest export dùng dấu `/` tương đối để dễ di chuyển.
 - Hash SHA-256 cho media đã download và export.
 
+### 3.3. M8 managed Asset files và metadata backup
+
+- File candidate được người dùng chọn bằng native Electron dialog ở main process. Renderer chỉ gửi AssetSlot ID/revision, không gửi absolute/relative source path, MIME, bytes hoặc hash để database tin tưởng.
+- Main kiểm tra signature/media type, free space khi filesystem cung cấp, copy vào `workspace/assets/{episodeId}/{assetSlotId}/{assetId}/` qua `.partial` + atomic rename và stream SHA-256. Disk-full/partial-copy/transaction error cleanup artifact mới; file nguồn không bị move/xóa/sửa.
+- Integrity `unattached/available/missing/hash_mismatch` được derive bằng path boundary, size và SHA-256. Integrity không ghi đè lifecycle `candidate/accepted/rejected`.
+- Metadata backup v1 là logical JSON strict có checksum, không phải raw SQLite và không thay thế migration backup. Nó chứa Phase 1 metadata nhưng không chứa binary thumbnail/media, credential, browser profile, transient source/rendered prompt hoặc raw import JSON.
+- Restore chỉ vào database business trống, strict-validate toàn bộ trước khi insert transaction; không merge/overwrite/reset. Relative media path được giữ nên restore sang workspace không có binary hiển thị `missing`.
+
 ## 4. Data model tổng thể
 
 Core Phase 1 chỉ gồm `prompt_templates`, `prompt_template_versions`, `episodes`, `scene_import_batches`, `scenes`, `asset_slots` và `assets`. Không tạo sẵn table cho automation chưa được duyệt. Các subsection về Flow/queue/export bên dưới là hướng mở rộng Phase 2–3, không thuộc migration `0001_phase1_core`.
@@ -169,6 +177,7 @@ Unique constraint: `(scene_id, slot_order)` và `canonical_name` trong một Epi
 - File integrity `unattached/available/missing/hash_mismatch` được derive khi đọc/preflight; file mất không đổi lifecycle accepted/rejected.
 - Phase 2 có thể mở rộng bằng `generation_attempt_id` hoặc tách read model `media_versions` nếu PoC chứng minh cần thiết; không tạo table trùng nghĩa trước use case.
 - File accepted không bị ghi đè khi có generation mới và thao tác archive metadata không tự động xóa binary.
+- M8 cho phép manual imported candidate, accept/reject/re-accept/archive và kiểm tra integrity qua typed IPC. Physical file dùng thư mục ID riêng; canonical filename/export layout tiếp tục thuộc Phase 3.
 
 ### `jobs` và `job_events`
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { EpisodesPage } from "@/components/episodes-page"
 import { StudioSidebar, type StudioRoute } from "@/components/studio-sidebar"
 import { TemplatesPage } from "@/components/templates-page"
+import { SettingsPage } from "@/components/settings-page"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -76,6 +77,8 @@ function App() {
           <EpisodesPage />
         ) : activeRoute === "templates" ? (
           <TemplatesPage />
+        ) : activeRoute === "settings" ? (
+          <SettingsPage />
         ) : (
           <WorkspacePlaceholder route={activeRoute} />
         )}

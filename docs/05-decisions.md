@@ -241,6 +241,42 @@
 **Decision:** trước import/reorder, UI chờ Episode notes autosave đang chạy; nếu notes còn lỗi/conflict thì dừng mutation. Sau đó UI lấy Episode aggregate/revision mới nhất và so cấu trúc Scene với snapshot lúc preview/bắt đầu reorder. Main vẫn revalidate payload/hash và dùng optimistic concurrency trong transaction.
 **Consequence:** import/reorder không dùng revision cũ do notes autosave, không âm thầm ghi lên Scene list đã đổi, và stale revision giữ nguyên JSON/order draft để người dùng xử lý. Reorder gửi toàn bộ Scene IDs, chỉ đổi `display_order`; canonical mapping giữ nguyên.
 
+### D-039 — Asset import là managed copy qua native main-process boundary
+
+**Status:** Accepted/Implemented trong M8 Approved/Completed ngày 2026-10-25; automated và manual acceptance PASS.
+**Decision:** renderer chỉ gửi AssetSlot ID/revision. Main mở native picker, kiểm tra file thường/signature/media type/dung lượng, kiểm tra free space khi filesystem hỗ trợ, copy bằng file `.partial` rồi atomic rename, và tự tính bytes/MIME/SHA-256. File nguồn chỉ được đọc, không move/xóa/sửa; archive/reject không xóa managed binary.
+**Consequence:** disk-full/copy/transaction failure cleanup artifact mới của lần import; renderer không thể đưa arbitrary path hoặc metadata giả vào database. File lưu dưới ID riêng; canonical filename cho export vẫn thuộc Phase 3.
+
+### D-040 — Asset lifecycle độc lập file integrity
+
+**Status:** Accepted/Implemented trong M8 Approved/Completed ngày 2026-10-25; automated và manual acceptance PASS.
+**Decision:** lifecycle chỉ có `candidate/accepted/rejected`; integrity `unattached/available/missing/hash_mismatch` là projection kiểm tra lại từ filesystem. Missing/hash mismatch không tự đổi lifecycle. Accept mới atomically reject accepted cũ trong slot; rejected candidate có thể re-accept nếu file available. Cùng SHA-256 trong cùng active slot bị chặn, nhưng được phép ở slot khác.
+**Consequence:** Episode chỉ `ready_to_export` khi required accepted files available. UI luôn hiển thị lifecycle và integrity riêng, có action kiểm tra lại; archive metadata không xóa file.
+
+### D-041 — AssetSlot M8 append-only canonical planning
+
+**Status:** Accepted/Implemented trong M8 Approved/Completed ngày 2026-10-25; automated và manual acceptance PASS.
+**Decision:** UI cho create/update AssetSlot nhưng không delete/reorder; canonical name do main tạo và readonly. Media type không đổi khi còn active candidate; prompt edit không tự reject accepted Asset vì Asset đã giữ `promptSnapshot`. Character reference tiếp tục deferred.
+**Consequence:** migration `0001` giữ nguyên; unique Episode canonical name và one-accepted constraint tiếp tục do DB bảo vệ, service/Zod preflight trả lỗi sớm hơn.
+
+### D-042 — Metadata backup v1 là logical JSON, không chứa binary
+
+**Status:** Accepted/Implemented trong M8 Approved/Completed ngày 2026-10-25; automated và manual acceptance PASS.
+**Decision:** export toàn bộ Phase 1 metadata bằng strict JSON envelope v1 có app/schema/format version và payload SHA-256. Backup gồm Template/Version, Episode, SceneImportBatch, Scene/narration, AssetSlot và Asset metadata; giữ relative path, ID, revision, timestamp và lifecycle. Không gồm thumbnail/media binary, browser profile, credential, rendered prompt, raw JSON hoặc `Nội dung nguồn` tạm.
+**Consequence:** restore ở workspace khác có thể cho integrity `missing` nhưng metadata/lifecycle vẫn nguyên. Migration safety SQLite backup vẫn là cơ chế riêng, không bị đổi nghĩa.
+
+### D-043 — Restore empty-only, transactional và có xác nhận
+
+**Status:** Accepted/Implemented trong M8 Approved/Completed ngày 2026-10-25; automated và manual acceptance PASS.
+**Decision:** Settings ghi rõ backup không có binary và yêu cầu confirm trước native picker. Restore chỉ chạy khi toàn bộ business tables trống; không merge, overwrite, reset hoặc xóa dữ liệu hiện tại. Main strict-validate checksum/reference/duplicate/path/invariant rồi insert toàn bộ trong một transaction và chạy FK/quick check.
+**Consequence:** lỗi restore rollback toàn bộ. UI không có reset database. Full workspace/media backup và relink vẫn là Q13/Q16 Phase 3.
+
+### D-044 — M8 kết thúc Phase 1 nhưng không mở automation/export
+
+**Status:** Accepted/Implemented trong M8 Approved/Completed ngày 2026-10-25; automated và manual acceptance PASS.
+**Decision:** M8 chỉ quản lý manual imported candidates, file integrity, metadata backup/restore và hardening. Asset preview dùng placeholder + open/reveal qua typed IPC; không custom streaming protocol. Các action mock generation/regenerate/media export bị bỏ; Google Flow, Playwright, queue, media export/manifest/CapCut và full workspace backup vẫn ngoài Phase 1.
+**Consequence:** Phase 1 vẫn offline và không thêm dependency/network requirement. Chỉ sau manual pilot/restore PASS mới đổi M8 sang Approved/Completed và bắt đầu Phase 2.
+
 ## 3. Quyết định Phase 1 đã đóng
 
 ### Q1 — Ý nghĩa hai số trong tên
@@ -358,7 +394,7 @@ Cần chốt backup chỉ gồm metadata hay gồm cả media. Đề xuất hai 
 
 ## 7. Checklist duyệt kế hoạch
 
-M5A, M5B và M6 đã Approved/Completed ngày 2026-10-24. M6 chỉ nối Template/Episode; D-032–D-034 đã được implement và manual acceptance PASS. M7 cùng D-035–D-038 đã Approved/Completed ngày 2026-10-25 sau khi implementation, automated/package verification và manual acceptance trên Electron review đều PASS. D-002–D-007, D-016 và D-022–D-038 đã đóng cho phạm vi hiện tại; Q1, Q2, Q3 schema, Q5 và Q6 không còn là câu hỏi mở. M8 chưa bắt đầu.
+M5A, M5B và M6 đã Approved/Completed ngày 2026-10-24. M6 chỉ nối Template/Episode; D-032–D-034 đã được implement và manual acceptance PASS. M7 cùng D-035–D-038 đã Approved/Completed ngày 2026-10-25 sau khi implementation, automated/package verification và manual acceptance trên Electron review đều PASS. M8 cùng D-039–D-044 đã Approved/Completed ngày 2026-10-25 sau automated/package verification và manual acceptance trên Electron thực tế; Phase 1 exit gate đã đạt. D-002–D-007, D-016 và D-022–D-044 đã đóng cho phạm vi hiện tại; Q1, Q2, Q3 schema, Q5 và Q6 không còn là câu hỏi mở. Phase 2 chưa bắt đầu.
 
 Các quyết định còn cần trước phase tương ứng:
 

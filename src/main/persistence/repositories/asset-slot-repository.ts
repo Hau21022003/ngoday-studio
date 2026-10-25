@@ -8,7 +8,13 @@ export class AssetSlotRepository {
 
   listByEpisode(episodeId: string) {
     const rows = this.database.connection
-      .prepare("SELECT * FROM asset_slots WHERE episode_id = ? ORDER BY scene_id, slot_order")
+      .prepare(`
+        SELECT slot.*
+        FROM asset_slots slot
+        JOIN scenes scene ON scene.id = slot.scene_id
+        WHERE slot.episode_id = ?
+        ORDER BY scene.display_order, slot.slot_order
+      `)
       .all(episodeId) as SqlRow[]
     return rows.map(mapAssetSlot)
   }
@@ -93,5 +99,12 @@ export class AssetSlotRepository {
       .prepare("SELECT COALESCE(MAX(slot_order), 0) AS max_order FROM asset_slots WHERE scene_id = ?")
       .get(sceneId) as SqlRow
     return Number(row.max_order) + 1
+  }
+
+  countByCanonicalNameKey(episodeId: string, canonicalNameKey: string) {
+    const row = this.database.connection
+      .prepare("SELECT COUNT(*) AS total FROM asset_slots WHERE episode_id = ? AND canonical_name_key = ?")
+      .get(episodeId, canonicalNameKey) as SqlRow
+    return Number(row.total)
   }
 }
