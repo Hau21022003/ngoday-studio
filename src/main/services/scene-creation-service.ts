@@ -61,28 +61,42 @@ export class SceneCreationService {
     private readonly slots: AssetSlotRepository,
   ) {}
 
+  private getActiveSceneTemplateVersion(templateVersionId: string) {
+    const version = this.templates.getVersionById(templateVersionId)
+    if (!version) throw new NotFoundError("TemplateVersion")
+    const template = this.templates.getById(version.templateId)
+    if (!template || template.purpose !== "scene" || template.status !== "active") {
+      throw new DomainError("VALIDATION_ERROR", "TemplateVersion phải thuộc Scene Template đang hoạt động.", {
+        fieldErrors: { templateVersionId: "Chọn version của Template purpose=scene, status=active." },
+      })
+    }
+    return version
+  }
+
   renderPrompt(command: RenderScenePromptCommand) {
     const episode = this.episodes.getById(command.episodeId)
     if (!episode) throw new NotFoundError("Episode")
-    const version = this.templates.getVersionById(command.templateVersionId)
-    if (!version) throw new NotFoundError("TemplateVersion")
+    const version = this.getActiveSceneTemplateVersion(command.templateVersionId)
     const known = new Set(version.variables.map((variable) => variable.name))
     const standardValues: Record<string, string> = {
       episode_title: episode.title,
+      topic: episode.topic,
+      notes: episode.notes,
+      source_content: command.sourceContent ?? "",
+      // Backward-compatible aliases already supported by the M5B implementation.
       episode_topic: episode.topic,
       episode_description: episode.description,
-      source_content: command.sourceContent ?? "",
     }
     const values = { ...(command.values ?? {}) }
     for (const [name, value] of Object.entries(standardValues)) {
-      if (known.has(name) && values[name] === undefined) values[name] = value
+      if (known.has(name)) values[name] = value
     }
     return this.templateService.render({ templateVersionId: command.templateVersionId, values })
   }
 
   validateImport(command: ValidateScenesImportCommand): ScenesImportPreview {
     if (!this.episodes.getById(command.episodeId)) throw new NotFoundError("Episode")
-    if (!this.templates.getVersionById(command.templateVersionId)) throw new NotFoundError("TemplateVersion")
+    this.getActiveSceneTemplateVersion(command.templateVersionId)
     if (command.mode === "replace" && this.scenes.countAssetsForEpisode(command.episodeId) > 0) {
       throw new DomainError(
         "SCENES_REPLACE_CONFLICT",

@@ -48,7 +48,8 @@ Tạo một workflow local đáng tin cậy theo chuỗi `Episode → Scenes →
 - **M5A — Approved ngày 2026-10-24.** Domain/schema/migration/repository/typed IPC baseline nằm tại `08-m5-domain-persistence-contract.md`.
 - **M5B — Approved/Completed ngày 2026-10-24.** Persistence foundation đã có migration `0001`, startup/checksum guard, backup safety, repository/service boundary, shared validation, typed preload/IPC và test/package evidence. Checkpoint review PASS sau khi chạy lại `npm run verify` và `npm run package:verify`; UI M1–M4 vẫn dùng mock/in-memory đúng phạm vi.
 - **M6 — Approved/Completed ngày 2026-10-24.** Template và Episode đã nối SQLite qua typed IPC/preload; manual acceptance trên ứng dụng thực tế xác nhận cả hai luồng lưu thành công. Preload sandbox build CommonJS `.cjs`; dev bridge smoke, automated verify và packaged four-launch service/renderer-bridge restart smoke đều PASS.
-- M7–M8 ở trạng thái planned; chưa triển khai Scene/Asset persistence.
+- **M7 — Approved/Completed ngày 2026-10-25.** Scenes UI đã nối persistence/typed IPC cho render/copy prompt, strict JSON preview/import, edit, reorder và approval. Automated verification, packaged restart smoke và manual acceptance trên Electron review đều PASS với JSON thực tế gồm 26 Scenes/26 AssetSlots; evidence tại `12-m7-scenes-vertical-slice.md`.
+- M8 vẫn ở trạng thái planned; AssetSlot trong M7 chỉ được hiển thị read-only để kiểm tra mapping import, chưa có Asset planning/persistence UI hoặc Phase 1 hardening.
 - Không có milestone database/persistence nào được phép bắt đầu trước khi M4 qua điểm dừng review.
 
 ### M1 — UI Foundation + Templates Browse
@@ -221,6 +222,8 @@ Manual acceptance trên ứng dụng thực tế đã PASS ngày 2026-10-24: Tem
 
 ### M7 — Scenes Vertical Slice
 
+**Implementation evidence:** `12-m7-scenes-vertical-slice.md` — implementation, automated/package verification và manual acceptance trên Electron review PASS ngày 2026-10-25. Người dùng xác nhận import thực tế 26 Scenes/26 AssetSlots, edit/save/status, approval validation + automatic demotion, dirty guard, reorder giữ canonical mapping, restart persistence và regression Template/Episode/Overview notes autosave.
+
 **Phạm vi**
 
 - Nối flow `Tạo Scenes` với Template renderer: chọn Scene Template, nhập `Nội dung nguồn` tùy chọn, preview và copy prompt.
@@ -240,7 +243,7 @@ Manual acceptance trên ứng dụng thực tế đã PASS ngày 2026-10-24: Tem
 
 **Điểm dừng review**
 
-Người dùng duyệt flow bằng một fixture JSON Scenes thực tế đã ẩn dữ liệu nhạy cảm, bao gồm render/copy prompt, import, edit, reorder và approval. Không triển khai asset persistence/hardening trước khi M7 được duyệt.
+Manual acceptance đã PASS ngày 2026-10-25 trên Electron review với JSON thực tế 26 Scenes/26 AssetSlots, gồm import, edit/save/status, approval validation + automatic demotion, dirty guard, reorder/canonical stability, restart persistence và regression M6. M7 dừng tại checkpoint Approved/Completed; M8 chưa bắt đầu.
 
 ### M8 — Asset Planning & Phase 1 Hardening
 

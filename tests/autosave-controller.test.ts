@@ -50,6 +50,40 @@ describe("Episode notes single-flight autosave", () => {
     controller.dispose()
   })
 
+  it("lets structural mutations await an autosave request that is already in flight", async () => {
+    let resolveSave!: (result: { revisionNo: number }) => void
+    const savePromise = new Promise<{ revisionNo: number }>((resolve) => { resolveSave = resolve })
+    const save = vi.fn(() => savePromise)
+    const controller = new SingleFlightAutosave(4, 750, save, () => undefined)
+
+    controller.schedule("notes trước import")
+    await vi.advanceTimersByTimeAsync(750)
+    const flush = controller.flush()
+    let settled = false
+    void flush.then(() => { settled = true })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    resolveSave({ revisionNo: 5 })
+    await flush
+    expect(settled).toBe(true)
+    expect(save).toHaveBeenCalledWith("notes trước import", 4)
+    controller.dispose()
+  })
+
+  it("reports a failed flush so an Episode structural mutation can stop", async () => {
+    const states: AutosaveState[] = []
+    const controller = new SingleFlightAutosave<string>(3, 10, async () => {
+      throw Object.assign(new Error("stale"), { code: "STALE_REVISION" })
+    }, (state) => states.push(state))
+
+    controller.schedule("draft that must be preserved")
+
+    await expect(controller.flush()).resolves.toBe(false)
+    await expect(controller.flush()).resolves.toBe(false)
+    expect(states.at(-1)).toMatchObject({ status: "conflict", dirty: true })
+  })
+
   it("retains the latest draft and pauses after a stale revision until explicitly rebased", async () => {
     const conflict = Object.assign(new Error("stale"), { code: "STALE_REVISION" })
     const states: AutosaveState[] = []
@@ -69,6 +103,22 @@ describe("Episode notes single-flight autosave", () => {
     controller.updateRevision(7)
     await controller.retry()
     expect(save).toHaveBeenLastCalledWith("bản nháp mới hơn", 7)
+    expect(states.at(-1)).toEqual({ status: "saved", error: null, dirty: false })
+    controller.dispose()
+  })
+
+  it("reactivates after the setup-cleanup-setup lifecycle replay used by React StrictMode", async () => {
+    const save = vi.fn(async () => ({ revisionNo: 5 }))
+    const states: AutosaveState[] = []
+    const controller = new SingleFlightAutosave(4, 750, save, (state) => states.push(state))
+
+    controller.activate()
+    controller.dispose()
+    controller.activate()
+    controller.schedule("ghi chú sau StrictMode replay")
+
+    await expect(controller.flush()).resolves.toBe(true)
+    expect(save).toHaveBeenCalledWith("ghi chú sau StrictMode replay", 4)
     expect(states.at(-1)).toEqual({ status: "saved", error: null, dirty: false })
     controller.dispose()
   })

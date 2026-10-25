@@ -9,7 +9,7 @@ import {
 import { studioChannels } from "../src/shared/ipc"
 import type { TempFoundation } from "./helpers/temp-foundation"
 import { createTempFoundation } from "./helpers/temp-foundation"
-import { seedSceneTemplate } from "./helpers/seed"
+import { sceneJson, seedEpisode, seedSceneTemplate } from "./helpers/seed"
 
 class FakeRegistrar implements IpcRegistrar {
   readonly handlers = new Map<string, (event: unknown, input: unknown) => unknown>()
@@ -99,6 +99,57 @@ describe("typed IPC boundary", () => {
       ok: true,
       data: { title: "Episode qua IPC", topic: "science", revisionNo: 1, archivedAt: null },
     })
+  })
+
+  it("runs the M7 render, strict import, edit, approval, and reorder use cases through typed IPC", async () => {
+    const template = seedSceneTemplate(testContext.foundation)
+    const episode = seedEpisode(testContext.foundation, "Episode IPC M7")
+    const versionId = template.versions[0]!.id
+    await expect(registrar.invoke(studioChannels.sceneCreationRenderPrompt, {
+      episodeId: episode.id,
+      templateVersionId: versionId,
+      sourceContent: "Nội dung tạm",
+    })).resolves.toMatchObject({ ok: true, data: { content: expect.stringContaining("Episode IPC M7") } })
+
+    const rawJson = sceneJson("Scene IPC")
+    const preview = await registrar.invoke(studioChannels.sceneCreationValidateImport, {
+      episodeId: episode.id,
+      templateVersionId: versionId,
+      mode: "append",
+      rawJson,
+    }) as { ok: true; data: { payloadHash: string } }
+    const imported = await registrar.invoke(studioChannels.sceneCreationCommitImport, {
+      episodeId: episode.id,
+      templateVersionId: versionId,
+      mode: "append",
+      rawJson,
+      payloadHash: preview.data.payloadHash,
+      expectedEpisodeRevisionNo: episode.revisionNo,
+    }) as { ok: true; data: { scenes: Array<{ id: string; revisionNo: number }>; episodeRevisionNo: number } }
+    const scene = imported.data.scenes[0]!
+
+    await expect(registrar.invoke(studioChannels.scenesUpdate, {
+      id: scene.id,
+      expectedRevisionNo: scene.revisionNo,
+      patch: { summary: "Summary đã lưu qua IPC" },
+    })).resolves.toMatchObject({ ok: true, data: { summary: "Summary đã lưu qua IPC", revisionNo: 2 } })
+    await expect(registrar.invoke(studioChannels.scenesTransitionStatus, {
+      id: scene.id,
+      expectedRevisionNo: 2,
+      status: "approved",
+    })).resolves.toMatchObject({ ok: true, data: { status: "approved", revisionNo: 3 } })
+    await expect(registrar.invoke(studioChannels.scenesReorder, {
+      episodeId: episode.id,
+      orderedSceneIds: [scene.id],
+      expectedEpisodeRevisionNo: imported.data.episodeRevisionNo,
+    })).resolves.toMatchObject({ ok: true, data: [{ id: scene.id, canonicalNo: 1, displayOrder: 1 }] })
+
+    await expect(registrar.invoke(studioChannels.sceneCreationValidateImport, {
+      episodeId: episode.id,
+      templateVersionId: versionId,
+      mode: "append",
+      rawJson: JSON.stringify({ schemaVersion: 1, scenes: [{ order: 1, title: "Bad", status: "approved" }] }),
+    })).resolves.toMatchObject({ ok: false, error: { code: "IMPORT_INVALID" } })
   })
 
   it("maps optimistic concurrency conflicts to a typed IPC error without overwriting data", async () => {

@@ -11,6 +11,14 @@ function requireStudioBridge(value: unknown): StudioBridge {
     || typeof candidate.episodes?.update !== "function"
     || typeof candidate.episodeThumbnails?.import !== "function"
     || typeof candidate.episodeThumbnails?.read !== "function"
+    || typeof candidate.sceneCreation?.renderPrompt !== "function"
+    || typeof candidate.sceneCreation?.validateImport !== "function"
+    || typeof candidate.sceneCreation?.commitImport !== "function"
+    || typeof candidate.scenes?.get !== "function"
+    || typeof candidate.scenes?.update !== "function"
+    || typeof candidate.scenes?.reorder !== "function"
+    || typeof candidate.scenes?.transitionStatus !== "function"
+    || typeof candidate.assetSlots?.list !== "function"
   ) {
     throw new Error("Studio preload bridge không khả dụng. Ứng dụng không thể truy cập persistence an toàn.")
   }

@@ -1,10 +1,12 @@
 import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
+import { randomUUID } from "node:crypto"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { sha256 } from "../src/main/domain/helpers"
 import { AssetSlotRepository } from "../src/main/persistence/repositories/asset-slot-repository"
 import { TemplateRepository } from "../src/main/persistence/repositories/template-repository"
+import { scenesJsonV1Sample } from "../src/shared/scenes-json-v1-sample"
 import type { TempFoundation } from "./helpers/temp-foundation"
 import { createTempFoundation } from "./helpers/temp-foundation"
 import { sceneJson, seedEpisode, seedSceneTemplate } from "./helpers/seed"
@@ -66,6 +68,87 @@ describe("persistence services", () => {
     })
     expect(preview).toMatchObject({ sceneCount: 2, slotCount: 3, warnings: [] })
     expect(preview.document.scenes.map((scene) => scene.order)).toEqual([1, 2])
+  })
+
+  it("keeps the centrally managed Scenes v1 sample compatible with import preview", () => {
+    const template = seedSceneTemplate(testContext.foundation)
+    const episode = seedEpisode(testContext.foundation)
+    const preview = testContext.foundation.services.sceneCreation.validateImport({
+      episodeId: episode.id,
+      templateVersionId: template.versions[0]!.id,
+      mode: "append",
+      rawJson: scenesJsonV1Sample,
+    })
+
+    expect(preview).toMatchObject({ sceneCount: 1, slotCount: 2, warnings: [] })
+    expect(preview.document).toEqual(JSON.parse(scenesJsonV1Sample))
+  })
+
+  it("renders only the Scene Template with approved reserved variables and rejects non-Scene templates", () => {
+    const variables = ["episode_title", "topic", "notes", "source_content", "episode_topic", "episode_description", "custom"].map((name) => ({
+      id: randomUUID(),
+      name,
+      label: name,
+      description: "Scene render test variable.",
+      type: "text" as const,
+      required: name !== "source_content",
+      defaultValue: "",
+      options: [],
+    }))
+    const template = testContext.foundation.services.templates.create({
+      name: "Scene variables contract",
+      description: "Template kiểm tra reserved variable mapping cho M7.",
+      purpose: "scene",
+      status: "active",
+      content: "{{episode_title}}|{{topic}}|{{notes}}|{{source_content}}|{{episode_topic}}|{{episode_description}}|{{custom}}",
+      variables,
+      changeNote: "Kiểm tra M7 reserved variables.",
+      createdByName: "Test",
+    })
+    const episode = seedEpisode(testContext.foundation, "Episode render M7")
+    const updatedEpisode = testContext.foundation.services.episodes.update({
+      id: episode.id,
+      expectedRevisionNo: episode.revisionNo,
+      updatedByName: "Test",
+      patch: { notes: "Ghi chú Episode" },
+    })
+    const withoutSource = testContext.foundation.services.sceneCreation.renderPrompt({
+      episodeId: updatedEpisode.id,
+      templateVersionId: template.versions[0]!.id,
+      values: { custom: "Giá trị tùy chỉnh" },
+    })
+    expect(withoutSource.content).toBe(
+      "Episode render M7|psychology|Ghi chú Episode||psychology|Episode thử nghiệm cho persistence foundation.|Giá trị tùy chỉnh",
+    )
+    expect(testContext.foundation.services.sceneCreation.renderPrompt({
+      episodeId: updatedEpisode.id,
+      templateVersionId: template.versions[0]!.id,
+      sourceContent: "Nội dung chỉ trong phiên",
+      values: {
+        episode_title: "Renderer không được ghi đè",
+        source_content: "Renderer cũng không được ghi đè source",
+        custom: "Giá trị tùy chỉnh",
+      },
+    }).content).toBe(
+      "Episode render M7|psychology|Ghi chú Episode|Nội dung chỉ trong phiên|psychology|Episode thử nghiệm cho persistence foundation.|Giá trị tùy chỉnh",
+    )
+
+    const wrongPurpose = testContext.foundation.services.templates.create({
+      name: "Thumbnail template M7",
+      description: "Template khác purpose không được dùng để tạo Scenes.",
+      purpose: "thumbnail",
+      status: "active",
+      content: "Tạo thumbnail.",
+      variables: [],
+      changeNote: "Kiểm tra purpose guard.",
+      createdByName: "Test",
+    })
+    expect(() => testContext.foundation.services.sceneCreation.validateImport({
+      episodeId: updatedEpisode.id,
+      templateVersionId: wrongPurpose.versions[0]!.id,
+      mode: "append",
+      rawJson: sceneJson(),
+    })).toThrowError(expect.objectContaining({ code: "VALIDATION_ERROR" }))
   })
 
   it("keeps TemplateVersion immutable and guards metadata/version concurrency", () => {
@@ -328,6 +411,64 @@ describe("persistence services", () => {
       { title: "Scene B", displayOrder: 1, canonicalNo: 2 },
       { title: "Scene A", displayOrder: 2, canonicalNo: 1 },
     ])
+    expect(() => testContext.foundation.services.scenes.reorder({
+      episodeId: episode.id,
+      orderedSceneIds: [imported.scenes[0]!.id, imported.scenes[1]!.id],
+      expectedEpisodeRevisionNo: imported.episodeRevisionNo,
+    })).toThrowError(expect.objectContaining({ code: "STALE_REVISION" }))
+  })
+
+  it("persists Scene edits, preserves approval for notes, and demotes approved content changes", () => {
+    const template = seedSceneTemplate(testContext.foundation)
+    const episode = seedEpisode(testContext.foundation)
+    const rawJson = sceneJson("Scene review")
+    const preview = testContext.foundation.services.sceneCreation.validateImport({
+      episodeId: episode.id,
+      templateVersionId: template.versions[0]!.id,
+      mode: "append",
+      rawJson,
+    })
+    const imported = testContext.foundation.services.sceneCreation.commitImport({
+      episodeId: episode.id,
+      templateVersionId: template.versions[0]!.id,
+      mode: "append",
+      rawJson,
+      payloadHash: preview.payloadHash,
+      expectedEpisodeRevisionNo: episode.revisionNo,
+    })
+    const approved = testContext.foundation.services.scenes.transitionStatus({
+      id: imported.scenes[0]!.id,
+      status: "approved",
+      expectedRevisionNo: 1,
+    })
+    const notesOnly = testContext.foundation.services.scenes.update({
+      id: approved.id,
+      expectedRevisionNo: approved.revisionNo,
+      patch: { notes: "Ghi chú không hạ approval" },
+    })
+    expect(notesOnly).toMatchObject({ status: "approved", notes: "Ghi chú không hạ approval" })
+
+    const contentEdit = testContext.foundation.services.scenes.update({
+      id: notesOnly.id,
+      expectedRevisionNo: notesOnly.revisionNo,
+      patch: { narration: "Narration đã chỉnh sửa sau approval." },
+    })
+    expect(contentEdit).toMatchObject({ status: "draft", approvedAt: null })
+    expect(() => testContext.foundation.services.scenes.update({
+      id: contentEdit.id,
+      expectedRevisionNo: notesOnly.revisionNo,
+      patch: { title: "Không được ghi đè bằng revision cũ" },
+    })).toThrowError(expect.objectContaining({ code: "STALE_REVISION" }))
+    const invalid = testContext.foundation.services.scenes.update({
+      id: contentEdit.id,
+      expectedRevisionNo: contentEdit.revisionNo,
+      patch: { narration: "" },
+    })
+    expect(() => testContext.foundation.services.scenes.transitionStatus({
+      id: invalid.id,
+      status: "approved",
+      expectedRevisionNo: invalid.revisionNo,
+    })).toThrowError(expect.objectContaining({ code: "INVALID_TRANSITION" }))
   })
 
   it("keeps Asset lifecycle accepted when file integrity becomes missing or mismatched", () => {

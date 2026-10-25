@@ -11,7 +11,7 @@ describe("preload bridge regression", () => {
     expect(preloadEntryFileName).toBe("index.cjs")
   })
 
-  it("exposes the M6 Template, Episode, and thumbnail calls on one typed bridge", async () => {
+  it("exposes the M6 and M7 use cases on one typed bridge", async () => {
     const invoke = vi.fn(async () => ({ ok: true, data: null })) as unknown as StudioInvoke
     const bridge = createStudioBridge(invoke, {
       platform: "win32",
@@ -26,6 +26,14 @@ describe("preload bridge regression", () => {
     await bridge.episodes.update({ id: templateId, expectedRevisionNo: 1, updatedByName: "Test", patch: { notes: "draft" } })
     await bridge.episodeThumbnails.import({ fileName: "thumb.png", mimeType: "image/png", dataBase64: "iVBORw==" })
     await bridge.episodeThumbnails.read({ relativePath: "thumbnails/thumb.png" })
+    await bridge.sceneCreation.renderPrompt({ episodeId: templateId, templateVersionId: templateId })
+    await bridge.sceneCreation.validateImport({ episodeId: templateId, templateVersionId: templateId, mode: "append", rawJson: "{}" })
+    await bridge.sceneCreation.commitImport({ episodeId: templateId, templateVersionId: templateId, mode: "append", rawJson: "{}", payloadHash: "a".repeat(64), expectedEpisodeRevisionNo: 1 })
+    await bridge.scenes.get({ id: templateId })
+    await bridge.scenes.update({ id: templateId, expectedRevisionNo: 1, patch: { notes: "draft" } })
+    await bridge.scenes.reorder({ episodeId: templateId, orderedSceneIds: [templateId], expectedEpisodeRevisionNo: 1 })
+    await bridge.scenes.transitionStatus({ id: templateId, status: "approved", expectedRevisionNo: 1 })
+    await bridge.assetSlots.list({ episodeId: templateId })
 
     expect(invoke.mock.calls.map(([channel]) => channel)).toEqual([
       studioChannels.templatesList,
@@ -34,6 +42,14 @@ describe("preload bridge regression", () => {
       studioChannels.episodesUpdate,
       studioChannels.episodeThumbnailsImport,
       studioChannels.episodeThumbnailsRead,
+      studioChannels.sceneCreationRenderPrompt,
+      studioChannels.sceneCreationValidateImport,
+      studioChannels.sceneCreationCommitImport,
+      studioChannels.scenesGet,
+      studioChannels.scenesUpdate,
+      studioChannels.scenesReorder,
+      studioChannels.scenesTransitionStatus,
+      studioChannels.assetSlotsList,
     ])
   })
 

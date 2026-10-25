@@ -35,6 +35,53 @@ describe("restart persistence", () => {
         updatedByName: "Test",
         patch: { notes: "Ghi chú phải còn sau khi mở lại.", thumbnailRelativePath: thumbnail.relativePath },
       })
+      const rawJson = JSON.stringify({
+        schemaVersion: 1,
+        scenes: [
+          {
+            order: 1,
+            title: "Scene restart A",
+            narration: "Narration A còn nguyên sau restart.",
+            visualDescription: "Visual A còn nguyên sau restart.",
+            sceneType: "ENVIRONMENT",
+            mediaType: "image",
+          },
+          {
+            order: 2,
+            title: "Scene restart B",
+            narration: "Narration B còn nguyên sau restart.",
+            visualDescription: "Visual B còn nguyên sau restart.",
+            sceneType: "B_ROLL",
+            mediaType: "video",
+          },
+        ],
+      })
+      const preview = foundation.services.sceneCreation.validateImport({
+        episodeId: episode.id,
+        templateVersionId: template.versions[0]!.id,
+        mode: "append",
+        rawJson,
+      })
+      const imported = foundation.services.sceneCreation.commitImport({
+        episodeId: episode.id,
+        templateVersionId: template.versions[0]!.id,
+        mode: "append",
+        rawJson,
+        payloadHash: preview.payloadHash,
+        expectedEpisodeRevisionNo: updatedEpisode.revisionNo,
+      })
+      const edited = foundation.services.scenes.update({
+        id: imported.scenes[0]!.id,
+        expectedRevisionNo: imported.scenes[0]!.revisionNo,
+        patch: { summary: "Summary M7 đã persist" },
+      })
+      foundation.services.scenes.transitionStatus({ id: edited.id, status: "approved", expectedRevisionNo: edited.revisionNo })
+      foundation.services.scenes.transitionStatus({ id: imported.scenes[1]!.id, status: "approved", expectedRevisionNo: 1 })
+      foundation.services.scenes.reorder({
+        episodeId: episode.id,
+        orderedSceneIds: [imported.scenes[1]!.id, imported.scenes[0]!.id],
+        expectedEpisodeRevisionNo: imported.episodeRevisionNo,
+      })
       foundation.close()
       foundation = null
 
@@ -48,7 +95,23 @@ describe("restart persistence", () => {
         id: episode.id,
         notes: updatedEpisode.notes,
         thumbnailRelativePath: thumbnail.relativePath,
-        revisionNo: updatedEpisode.revisionNo,
+        revisionNo: imported.episodeRevisionNo + 1,
+        sceneCount: 2,
+        workflowStatus: "scenes_ready",
+      })
+      expect(foundation.services.scenes.list(episode.id).map((scene) => ({
+        id: scene.id,
+        displayOrder: scene.displayOrder,
+        canonicalNo: scene.canonicalNo,
+        status: scene.status,
+      }))).toEqual([
+        { id: imported.scenes[1]!.id, displayOrder: 1, canonicalNo: 2, status: "approved" },
+        { id: imported.scenes[0]!.id, displayOrder: 2, canonicalNo: 1, status: "approved" },
+      ])
+      expect(foundation.services.scenes.get(imported.scenes[0]!.id)).toMatchObject({
+        summary: "Summary M7 đã persist",
+        assetSlots: [{ canonicalName: "scene-01-01", prompt: "Visual A còn nguyên sau restart." }],
+        provenance: { templateVersionId: template.versions[0]!.id },
       })
       expect(foundation.services.episodeThumbnails.read({ relativePath: thumbnail.relativePath })).toEqual(thumbnail)
     } finally {

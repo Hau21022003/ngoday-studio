@@ -13,7 +13,7 @@ type SaveResult = { revisionNo: number }
 class SingleFlightAutosave<T> {
   private revisionNo: number
   private pending: T | undefined
-  private inFlight = false
+  private activeFlush: Promise<boolean> | null = null
   private blockedByConflict = false
   private timer: ReturnType<typeof setTimeout> | undefined
   private disposed = false
@@ -35,12 +35,23 @@ class SingleFlightAutosave<T> {
     if (!this.blockedByConflict) this.timer = setTimeout(() => void this.flush(), this.delayMs)
   }
 
-  async flush() {
-    if (this.disposed || this.inFlight || this.blockedByConflict || this.pending === undefined) return
+  flush(): Promise<boolean> {
+    if (this.activeFlush) return this.activeFlush
+    if (this.disposed) return Promise.resolve(false)
+    if (this.blockedByConflict) return Promise.resolve(false)
+    if (this.pending === undefined) return Promise.resolve(true)
+    this.activeFlush = this.flushPending().finally(() => {
+      this.activeFlush = null
+    })
+    return this.activeFlush
+  }
+
+  private async flushPending(): Promise<boolean> {
+    if (this.disposed || this.blockedByConflict) return false
+    if (this.pending === undefined) return true
     this.clearTimer()
     const value = this.pending
     this.pending = undefined
-    this.inFlight = true
     this.onState({ status: "saving", error: null, dirty: true })
     let succeeded = false
     try {
@@ -53,10 +64,10 @@ class SingleFlightAutosave<T> {
       const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined
       this.blockedByConflict = code === "STALE_REVISION"
       this.onState({ status: code === "STALE_REVISION" ? "conflict" : "error", error, dirty: true })
-    } finally {
-      this.inFlight = false
+      return false
     }
-    if (succeeded && this.pending !== undefined) await this.flush()
+    if (succeeded && this.pending !== undefined) return this.flushPending()
+    return succeeded
   }
 
   retry() {
@@ -66,6 +77,10 @@ class SingleFlightAutosave<T> {
   updateRevision(revisionNo: number) {
     this.revisionNo = revisionNo
     this.blockedByConflict = false
+  }
+
+  activate() {
+    this.disposed = false
   }
 
   dispose() {
@@ -105,7 +120,10 @@ function useSingleFlightAutosave<T>({
     controllerRef.current?.updateRevision(initialRevisionNo)
   }, [initialRevisionNo])
 
-  useEffect(() => () => controllerRef.current?.dispose(), [])
+  useEffect(() => {
+    controllerRef.current?.activate()
+    return () => controllerRef.current?.dispose()
+  }, [])
 
   return {
     ...state,

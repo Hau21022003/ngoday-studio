@@ -217,6 +217,30 @@
 **Decision:** build preload thành CommonJS `index.cjs` và dùng một shared artifact name cho cả build config lẫn `BrowserWindow`. Giữ nguyên `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`; renderer fail-fast nếu typed bridge M6 không tồn tại và không dùng mock/in-memory fallback.
 **Reason:** Electron sandboxed preload không load được bundle ESM `index.mjs` trong cả dev và packaged app (`SyntaxError: Cannot use import statement outside a module`), khiến `contextBridge.exposeInMainWorld` không chạy và `window.studio` là `undefined`.
 
+### D-035 — Scene Template đủ điều kiện và version bất biến trong flow tạo Scenes
+
+**Status:** Accepted/Implemented trong M7 Approved/Completed ngày 2026-10-25; manual acceptance PASS.
+**Decision:** UI chỉ liệt kê Template `purpose=scene`, `status=active`; người dùng chọn một TemplateVersion bất biến cụ thể. Main service kiểm tra lại cả purpose/status cho render, validate và commit thay vì tin dữ liệu renderer.
+**Consequence:** Template archived/experimental hoặc Template purpose khác không thể tạo provenance Scene mới. Import batch luôn trỏ đúng TemplateVersion đã chọn; không đổi schema.
+
+### D-036 — Episode variables tự động và input render tạm thời
+
+**Status:** Accepted/Implemented trong M7 Approved/Completed ngày 2026-10-25; manual acceptance PASS.
+**Decision:** Scene render tự điền các biến chuẩn `episode_title`, `topic`, `notes`, `source_content`; tiếp tục hỗ trợ alias M5B `episode_topic`, `episode_description`. Biến custom được nhập trong flow. `source_content`, custom values, rendered prompt và raw JSON chỉ tồn tại trong phiên renderer.
+**Consequence:** Episode là nguồn dữ liệu chuẩn cho metadata prompt; provenance chỉ giữ hash/TemplateVersion theo D-029, không persist nội dung nhạy cảm hoặc tạo Script object.
+
+### D-037 — Scene dùng explicit save và status transition tách biệt
+
+**Status:** Accepted/Implemented trong M7 Approved/Completed ngày 2026-10-25; manual acceptance PASS.
+**Decision:** Scene editor giữ draft cục bộ và chỉ ghi khi người dùng Save hoặc áp dụng status. Mutation dùng Scene `expectedRevisionNo`; stale/error giữ draft. Sửa content của Scene approved làm Scene về `draft`, còn notes-only giữ approval; chuyển `approved` phải qua validation narration và visual description ở main service.
+**Consequence:** không autosave đè Scene revision, navigation có dirty guard, và renderer không tự quyết định invariant approval.
+
+### D-038 — Structural Scene mutation phối hợp Episode revision
+
+**Status:** Accepted/Implemented trong M7 Approved/Completed ngày 2026-10-25; manual acceptance PASS.
+**Decision:** trước import/reorder, UI chờ Episode notes autosave đang chạy; nếu notes còn lỗi/conflict thì dừng mutation. Sau đó UI lấy Episode aggregate/revision mới nhất và so cấu trúc Scene với snapshot lúc preview/bắt đầu reorder. Main vẫn revalidate payload/hash và dùng optimistic concurrency trong transaction.
+**Consequence:** import/reorder không dùng revision cũ do notes autosave, không âm thầm ghi lên Scene list đã đổi, và stale revision giữ nguyên JSON/order draft để người dùng xử lý. Reorder gửi toàn bộ Scene IDs, chỉ đổi `display_order`; canonical mapping giữ nguyên.
+
 ## 3. Quyết định Phase 1 đã đóng
 
 ### Q1 — Ý nghĩa hai số trong tên
@@ -334,7 +358,7 @@ Cần chốt backup chỉ gồm metadata hay gồm cả media. Đề xuất hai 
 
 ## 7. Checklist duyệt kế hoạch
 
-M5A, M5B và M6 đã Approved/Completed ngày 2026-10-24. M6 chỉ nối Template/Episode; D-032–D-034 đã được implement và manual acceptance PASS. D-002–D-007, D-016 và D-022–D-034 đã đóng cho phạm vi hiện tại; Q1, Q2, Q3 schema, Q5 và Q6 không còn là câu hỏi mở.
+M5A, M5B và M6 đã Approved/Completed ngày 2026-10-24. M6 chỉ nối Template/Episode; D-032–D-034 đã được implement và manual acceptance PASS. M7 cùng D-035–D-038 đã Approved/Completed ngày 2026-10-25 sau khi implementation, automated/package verification và manual acceptance trên Electron review đều PASS. D-002–D-007, D-016 và D-022–D-038 đã đóng cho phạm vi hiện tại; Q1, Q2, Q3 schema, Q5 và Q6 không còn là câu hỏi mở. M8 chưa bắt đầu.
 
 Các quyết định còn cần trước phase tương ứng:
 

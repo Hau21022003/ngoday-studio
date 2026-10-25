@@ -26,6 +26,7 @@ import { topics, workflowStatuses } from "@/components/episode-data"
 import { EpisodeScenesTab } from "@/components/episode-scenes-tab"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { ErrorState, LoadingState } from "@/components/ui/state-feedback"
 import { Tabs, type TabItem } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -259,6 +260,9 @@ function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWo
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
   const [notes, setNotes] = useState("")
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading")
+  const [sceneDirty, setSceneDirty] = useState(false)
+  const [pendingTab, setPendingTab] = useState<EpisodeWorkspaceTab | null>(null)
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
   const loadRequest = useRef(0)
 
   const autosave = useSingleFlightAutosave<string>({
@@ -299,22 +303,65 @@ function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWo
   useEffect(loadEpisode, [episodeId])
 
   useEffect(() => {
-    if (!autosave.dirty) return
+    if (!autosave.dirty && !sceneDirty) return
     const handleBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault()
     window.addEventListener("beforeunload", handleBeforeUnload)
     return () => window.removeEventListener("beforeunload", handleBeforeUnload)
-  }, [autosave.dirty])
+  }, [autosave.dirty, sceneDirty])
 
-  function navigateTab(tab: EpisodeWorkspaceTab) {
-    void autosave.flush()
+  useEffect(() => {
+    if (!sceneDirty) return
+    const handleAnchorNavigation = (event: globalThis.MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null
+      if (!target || target.target || target.hasAttribute("download") || target.href === window.location.href) return
+      event.preventDefault()
+      event.stopPropagation()
+      setPendingHref(target.href)
+    }
+    document.addEventListener("click", handleAnchorNavigation, true)
+    return () => document.removeEventListener("click", handleAnchorNavigation, true)
+  }, [sceneDirty])
+
+  async function performTabNavigation(tab: EpisodeWorkspaceTab) {
+    await autosave.flush()
     setActiveTab(tab)
     if (episodeId) updateWorkspaceUrl(tab, episodeId)
   }
 
+  function navigateTab(tab: EpisodeWorkspaceTab) {
+    if (activeTab === "scenes" && sceneDirty && tab !== "scenes") {
+      setPendingTab(tab)
+      return
+    }
+    void performTabNavigation(tab)
+  }
+
   function guardDirtyNavigation(event: MouseEvent<HTMLAnchorElement>) {
+    if (sceneDirty) {
+      event.preventDefault()
+      setPendingHref(event.currentTarget.href)
+      return
+    }
     if (!autosave.dirty) return
     event.preventDefault()
     void autosave.flush()
+  }
+
+  async function refreshWorkspaceEpisode() {
+    if (!episodeId) throw new Error("Thiếu mã episode.")
+    const latest = await unwrapResult(window.studio.episodes.get({ id: episodeId }))
+    setEpisode(latest)
+    autosave.updateRevision(latest.revisionNo)
+    return latest
+  }
+
+  async function prepareEpisodeMutation() {
+    const notesSaved = await autosave.flush()
+    if (!notesSaved) {
+      throw new Error("Không thể tiếp tục khi ghi chú Episode còn xung đột hoặc chưa lưu được. Hãy xử lý ghi chú rồi thử lại.")
+    }
+    return refreshWorkspaceEpisode()
   }
 
   async function retryAutosave() {
@@ -334,6 +381,7 @@ function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWo
   if (loadState === "error" || !episode) return <div className="min-h-screen bg-background px-5 py-6 sm:px-7 lg:px-8 lg:py-7"><ErrorState onRetry={loadEpisode} /></div>
 
   return (
+    <>
     <div className="min-h-screen bg-background px-5 py-6 sm:px-7 lg:px-8 lg:py-7">
       <header className="pl-10 lg:pl-0">
         <nav aria-label="Breadcrumb">
@@ -386,9 +434,39 @@ function EpisodeWorkspacePage({ initialTab, episodeId }: { initialTab: EpisodeWo
             onNotesBlur={() => void autosave.flush()}
             onRetryAutosave={() => void retryAutosave()}
           />
-        ) : activeTab === "scenes" ? <EpisodeScenesTab /> : <EpisodeAssetsTab exportRequest={assetExportRequest} />}
+        ) : activeTab === "scenes" ? (
+          <EpisodeScenesTab
+            episode={episode}
+            prepareEpisodeMutation={prepareEpisodeMutation}
+            refreshEpisode={refreshWorkspaceEpisode}
+            onDirtyChange={setSceneDirty}
+          />
+        ) : <EpisodeAssetsTab exportRequest={assetExportRequest} />}
       </main>
     </div>
+    <ConfirmDialog
+      open={pendingTab !== null || pendingHref !== null}
+      onOpenChange={(open) => {
+        if (!open) {
+          setPendingTab(null)
+          setPendingHref(null)
+        }
+      }}
+      title="Bỏ thay đổi Scene chưa lưu?"
+      description="Bản nháp Scene hoặc thứ tự đang chỉnh sẽ bị bỏ khi rời tab Scenes."
+      cancelLabel="Tiếp tục chỉnh sửa"
+      confirmLabel="Bỏ thay đổi"
+      onConfirm={() => {
+        const tab = pendingTab
+        const href = pendingHref
+        setPendingTab(null)
+        setPendingHref(null)
+        setSceneDirty(false)
+        if (tab) void performTabNavigation(tab)
+        else if (href) window.location.assign(href)
+      }}
+    />
+    </>
   )
 }
 

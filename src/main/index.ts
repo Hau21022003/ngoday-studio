@@ -122,13 +122,28 @@ async function runBridgeSmoke(smokeRoot: string, phase: "bridge-write" | "bridge
             if (!result.ok) throw new Error(result.error.code + ": " + result.error.message)
             return result.data
           }
+          const sceneVariables = [
+            { name: "episode_title", label: "Episode title", required: true },
+            { name: "topic", label: "Topic", required: true },
+            { name: "notes", label: "Notes", required: true },
+            { name: "source_content", label: "Source", required: false }
+          ].map((variable) => ({
+            id: crypto.randomUUID(),
+            name: variable.name,
+            label: variable.label,
+            description: "Packaged M7 Scene variable.",
+            type: "text",
+            required: variable.required,
+            defaultValue: "",
+            options: []
+          }))
           const createdTemplate = unwrap(await api.templates.create({
             name: "Bridge packaged template",
             description: "Template được tạo qua preload bridge trong packaged app.",
             purpose: "scene",
             status: "active",
-            content: "Bridge template version one.",
-            variables: [],
+            content: "Bridge template version one for {{episode_title}}.",
+            variables: sceneVariables.filter((variable) => variable.name === "episode_title"),
             changeNote: "Khởi tạo qua bridge.",
             createdByName: "Package Bridge"
           }))
@@ -137,15 +152,20 @@ async function runBridgeSmoke(smokeRoot: string, phase: "bridge-write" | "bridge
             expectedRevisionNo: createdTemplate.revisionNo,
             patch: { description: "Template đã lưu metadata và version qua preload bridge." },
             version: {
-              content: "Bridge template version two.",
-              variables: [],
+              content: "Bridge template version two for {{episode_title}}. Topic {{topic}}. Notes {{notes}}. Source {{source_content}}.",
+              variables: sceneVariables,
               changeNote: "Version mới qua bridge.",
               createdByName: "Package Bridge"
             }
           }))
           const rendered = unwrap(await api.templates.render({
             templateVersionId: savedTemplate.versions[0].id,
-            values: {}
+            values: {
+              episode_title: "Direct render",
+              topic: "science",
+              notes: "Direct notes",
+              source_content: ""
+            }
           }))
           const thumbnail = unwrap(await api.episodeThumbnails.import({
             fileName: "bridge.png",
@@ -173,35 +193,114 @@ async function runBridgeSmoke(smokeRoot: string, phase: "bridge-write" | "bridge
             updatedByName: "Package Bridge",
             patch: { notes: "Bridge latest draft" }
           }))
+          const renderedScenePrompt = unwrap(await api.sceneCreation.renderPrompt({
+            episodeId: episodeThree.id,
+            templateVersionId: savedTemplate.versions[0].id,
+            sourceContent: "Bridge transient source"
+          }))
+          const rawScenes = JSON.stringify({
+            schemaVersion: 1,
+            scenes: [
+              {
+                order: 1,
+                title: "Bridge Scene A",
+                narration: "Bridge narration A",
+                visualDescription: "Bridge visual A",
+                sceneType: "ENVIRONMENT",
+                mediaType: "image",
+                assetSlots: [{ order: 1, mediaType: "image", prompt: "Bridge prompt A", required: true }]
+              },
+              {
+                order: 2,
+                title: "Bridge Scene B",
+                narration: "Bridge narration B",
+                visualDescription: "Bridge visual B",
+                sceneType: "B_ROLL",
+                mediaType: "video",
+                assetSlots: [{ order: 1, mediaType: "video", prompt: "Bridge prompt B", required: true }]
+              }
+            ]
+          })
+          const scenePreview = unwrap(await api.sceneCreation.validateImport({
+            episodeId: episodeThree.id,
+            templateVersionId: savedTemplate.versions[0].id,
+            renderedPromptHash: renderedScenePrompt.contentHash,
+            mode: "append",
+            rawJson: rawScenes
+          }))
+          const importedScenes = unwrap(await api.sceneCreation.commitImport({
+            episodeId: episodeThree.id,
+            templateVersionId: savedTemplate.versions[0].id,
+            renderedPromptHash: renderedScenePrompt.contentHash,
+            mode: "append",
+            rawJson: rawScenes,
+            payloadHash: scenePreview.payloadHash,
+            expectedEpisodeRevisionNo: episodeThree.revisionNo
+          }))
+          const editedScene = unwrap(await api.scenes.update({
+            id: importedScenes.scenes[0].id,
+            expectedRevisionNo: importedScenes.scenes[0].revisionNo,
+            patch: { summary: "Bridge summary persisted" }
+          }))
+          const approvedSceneA = unwrap(await api.scenes.transitionStatus({
+            id: editedScene.id,
+            status: "approved",
+            expectedRevisionNo: editedScene.revisionNo
+          }))
+          unwrap(await api.scenes.transitionStatus({
+            id: importedScenes.scenes[1].id,
+            status: "approved",
+            expectedRevisionNo: importedScenes.scenes[1].revisionNo
+          }))
+          const reorderedScenes = unwrap(await api.scenes.reorder({
+            episodeId: episodeThree.id,
+            orderedSceneIds: [importedScenes.scenes[1].id, importedScenes.scenes[0].id],
+            expectedEpisodeRevisionNo: importedScenes.episodeRevisionNo
+          }))
           return {
             templateId: savedTemplate.id,
+            templateVersionId: savedTemplate.versions[0].id,
             templateRevisionNo: savedTemplate.revisionNo,
             templateVersionCount: savedTemplate.versions.length,
             renderedContent: rendered.content,
             episodeId: episodeThree.id,
-            episodeRevisionNo: episodeThree.revisionNo,
+            episodeRevisionNo: importedScenes.episodeRevisionNo + 1,
             episodeNotes: episodeThree.notes,
+            sceneIds: importedScenes.scenes.map((scene) => scene.id),
+            sceneOrder: reorderedScenes.map((scene) => scene.id),
+            approvedSceneRevisionBeforeReorder: approvedSceneA.revisionNo,
+            renderedSceneContent: renderedScenePrompt.content,
             thumbnailRelativePath: thumbnail.relativePath,
             thumbnailReadable: thumbnailRead.dataUrl.startsWith("data:image/png;base64,")
           }
         })()
       `, true) as {
         templateId: string
+        templateVersionId: string
         templateRevisionNo: number
         templateVersionCount: number
         renderedContent: string
         episodeId: string
         episodeRevisionNo: number
         episodeNotes: string
+        sceneIds: string[]
+        sceneOrder: string[]
+        approvedSceneRevisionBeforeReorder: number
+        renderedSceneContent: string
         thumbnailRelativePath: string
         thumbnailReadable: boolean
       }
       if (
         result.templateRevisionNo !== 2
         || result.templateVersionCount !== 2
-        || result.renderedContent !== "Bridge template version two."
-        || result.episodeRevisionNo !== 3
+        || result.renderedContent !== "Bridge template version two for Direct render. Topic science. Notes Direct notes. Source ."
+        || result.episodeRevisionNo !== 5
         || result.episodeNotes !== "Bridge latest draft"
+        || result.sceneOrder[0] !== result.sceneIds[1]
+        || result.sceneOrder[1] !== result.sceneIds[0]
+        || result.approvedSceneRevisionBeforeReorder !== 3
+        || !result.renderedSceneContent.includes("Bridge packaged episode")
+        || !result.renderedSceneContent.includes("Bridge transient source")
         || !result.thumbnailReadable
       ) {
         throw new Error("Packaged preload bridge write flow returned unexpected data.")
@@ -212,8 +311,10 @@ async function runBridgeSmoke(smokeRoot: string, phase: "bridge-write" | "bridge
 
     const fixture = JSON.parse(readFileSync(join(smokeRoot, "persistence-smoke-bridge-write.json"), "utf8")) as {
       templateId: string
+      templateVersionId: string
       episodeId: string
       episodeRevisionNo: number
+      sceneIds: string[]
       thumbnailRelativePath: string
     }
     const result = await window.webContents.executeJavaScript(`
@@ -230,6 +331,9 @@ async function runBridgeSmoke(smokeRoot: string, phase: "bridge-write" | "bridge
         const thumbnail = unwrap(await api.episodeThumbnails.read({ relativePath: fixture.thumbnailRelativePath }))
         const templates = unwrap(await api.templates.list({ page: 1, pageSize: 100, search: "Bridge packaged" }))
         const episodes = unwrap(await api.episodes.list({ page: 1, pageSize: 100, search: "Bridge packaged" }))
+        const scenes = unwrap(await api.scenes.list({ episodeId: fixture.episodeId }))
+        const sceneA = unwrap(await api.scenes.get({ id: fixture.sceneIds[0] }))
+        const sceneB = unwrap(await api.scenes.get({ id: fixture.sceneIds[1] }))
         const updatedEpisode = unwrap(await api.episodes.update({
           id: episode.id,
           expectedRevisionNo: episode.revisionNo,
@@ -241,6 +345,12 @@ async function runBridgeSmoke(smokeRoot: string, phase: "bridge-write" | "bridge
           templateVersionCount: template.versions.length,
           episodeRevisionNo: updatedEpisode.revisionNo,
           episodeNotes: updatedEpisode.notes,
+          sceneCount: scenes.length,
+          sceneOrder: scenes.map((scene) => scene.id),
+          sceneAApproved: sceneA.status === "approved" && sceneA.summary === "Bridge summary persisted",
+          sceneBCanonicalNo: sceneB.canonicalNo,
+          sceneAPrompt: sceneA.assetSlots[0]?.prompt,
+          sceneAHasProvenance: sceneA.provenance?.templateVersionId === fixture.templateVersionId,
           templateListContainsFixture: templates.items.some((item) => item.id === fixture.templateId),
           episodeListContainsFixture: episodes.items.some((item) => item.id === fixture.episodeId),
           thumbnailReadable: thumbnail.dataUrl.startsWith("data:image/png;base64,")
@@ -251,6 +361,12 @@ async function runBridgeSmoke(smokeRoot: string, phase: "bridge-write" | "bridge
       templateVersionCount: number
       episodeRevisionNo: number
       episodeNotes: string
+      sceneCount: number
+      sceneOrder: string[]
+      sceneAApproved: boolean
+      sceneBCanonicalNo: number
+      sceneAPrompt: string
+      sceneAHasProvenance: boolean
       templateListContainsFixture: boolean
       episodeListContainsFixture: boolean
       thumbnailReadable: boolean
@@ -260,6 +376,13 @@ async function runBridgeSmoke(smokeRoot: string, phase: "bridge-write" | "bridge
       || result.templateVersionCount !== 2
       || result.episodeRevisionNo !== fixture.episodeRevisionNo + 1
       || result.episodeNotes !== "Bridge autosave after restart"
+      || result.sceneCount !== 2
+      || result.sceneOrder[0] !== fixture.sceneIds[1]
+      || result.sceneOrder[1] !== fixture.sceneIds[0]
+      || !result.sceneAApproved
+      || result.sceneBCanonicalNo !== 2
+      || result.sceneAPrompt !== "Bridge prompt A"
+      || !result.sceneAHasProvenance
       || !result.templateListContainsFixture
       || !result.episodeListContainsFixture
       || !result.thumbnailReadable
